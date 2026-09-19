@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { AlertTriangle, ArrowUpRight, Bell, CalendarDays, Check, ChevronDown, ChevronRight, CircleHelp, Cpu, IndianRupee, LayoutDashboard, MessageSquareText, Mic, Network, PanelLeft, Search, ShieldCheck, SlidersHorizontal, Sparkles, WalletCards, X } from 'lucide-react'
+import { AlertTriangle, ArrowUpRight, Bell, CalendarDays, Check, ChevronDown, ChevronRight, CircleHelp, Cpu, IndianRupee, LayoutDashboard, MessageSquareText, Mic, Moon, Network, PanelLeft, Search, ShieldCheck, SlidersHorizontal, Sparkles, Sun, WalletCards, X } from 'lucide-react'
 import { existingCommitment, formatCompactINR, formatINR, monthlyIncome, notifications, obligations, safetyThreshold } from '@/lib/fin-sentinel-data'
 import { parseNotifications } from '@/lib/parser'
 import { reconstructLoanGraph } from '@/lib/graph_engine'
@@ -31,6 +31,7 @@ export function FinSentinelDashboard() {
   const [query, setQuery] = useState('')
   const [queryAnswer, setQueryAnswer] = useState('')
   const [showNotifications, setShowNotifications] = useState(false)
+  const [isDeckTheme, setIsDeckTheme] = useState(false)
   const parsedEvents = useMemo(() => parseNotifications(notifications), [])
   const graph = useMemo(() => reconstructLoanGraph(parsedEvents), [parsedEvents])
   const total = existingCommitment + emi
@@ -43,7 +44,7 @@ export function FinSentinelDashboard() {
   }
 
   return (
-    <main className="sentinel-shell">
+    <main className={`sentinel-shell ${isDeckTheme ? 'deck-theme' : ''}`}>
       <aside className="sidebar">
         <div className="brand"><div className="brand-mark"><ShieldCheck size={19} /></div><div><div className="brand-name">FIN SENTINEL</div><div className="brand-sub">THE MYSTIC MERGE</div></div></div>
         <div className="privacy-pill"><span className="pulse-dot" /> ON-DEVICE MODE <span className="info-dot">i</span></div>
@@ -55,7 +56,7 @@ export function FinSentinelDashboard() {
       </aside>
 
       <section className="main-area">
-        <header className="topbar"><div className="mobile-brand"><div className="brand-mark"><ShieldCheck size={17} /></div><span>FIN SENTINEL</span></div><div className="topbar-right"><span className="sync-status"><span className="green-dot" /> Last synced just now</span><button className="icon-button" aria-label="Notifications" onClick={() => setShowNotifications(true)}><Bell size={18} /><span className="bell-badge">3</span></button><button className="top-avatar">KC</button></div></header>
+        <header className="topbar"><div className="mobile-brand"><div className="brand-mark"><ShieldCheck size={17} /></div><span>FIN SENTINEL</span></div><div className="topbar-right"><span className="sync-status"><span className="green-dot" /> Last synced just now</span><button className="icon-button" aria-label="Notifications" onClick={() => setShowNotifications(true)}><Bell size={18} /><span className="bell-badge">3</span></button><button className="theme-toggle" aria-label={isDeckTheme ? 'Use dark theme' : 'Use pitch deck theme'} onClick={() => setIsDeckTheme(!isDeckTheme)}>{isDeckTheme ? <Moon size={16} /> : <Sun size={16} />}<span>{isDeckTheme ? 'Dark' : 'Deck'}</span></button><button className="top-avatar">KC</button></div></header>
         <div className="content-wrap">
           <div className="page-heading"><div><div className="eyebrow"><span className="live-line" /> FINANCIAL HEALTH OVERVIEW</div><h1>Good morning, Kanishka.</h1><p>Here&apos;s your complete repayment picture for June 2026.</p></div><button className="sync-button"><Sparkles size={15} /> Re-scan notifications</button></div>
 
