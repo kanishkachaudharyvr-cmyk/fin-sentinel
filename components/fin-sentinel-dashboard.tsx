@@ -35,7 +35,7 @@ export function FinSentinelDashboard() {
   const [summary, setSummary] = useState({ monthly_income: monthlyIncome, total_existing_commitments: existingCommitment, current_dti: (existingCommitment / monthlyIncome) * 100, risk_status: 'HEALTHY', dti_threshold: safetyThreshold })
   const [calendar, setCalendar] = useState<typeof days>(days)
   const [simulation, setSimulation] = useState({ projected_dti: ((existingCommitment + emi) / monthlyIncome) * 100, threshold_delta: 0, warning_reasons: [] as string[], risk_status: 'HEALTHY' })
-  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || ''
   const parsedEvents = useMemo(() => parseNotifications(notifications), [])
   useEffect(() => {
     Promise.all([fetch(`${apiBase}/api/financial/summary`), fetch(`${apiBase}/api/repayments/calendar`)]).then(async ([summaryResponse, calendarResponse]) => {
