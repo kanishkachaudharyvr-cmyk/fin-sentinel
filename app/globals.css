@@ -40,6 +40,23 @@ button { cursor: pointer; }
 .deck-theme .privacy-pill, .deck-theme .secure-box { color: var(--deck-teal); background: #e7f7f0; border-color: #b8e5d5; }
 .deck-theme .secure-box strong { color: #207b6b; }.deck-theme .secure-box small { color: #5e8e80; }
 .deck-theme .nav-item { color: #796e80; }.deck-theme .nav-item:hover, .deck-theme .nav-item.active { background: var(--deck-lilac); color: var(--deck-purple); }.deck-theme .nav-item.active { box-shadow: inset 2px 0 var(--deck-purple); }
+
+/* Readability pass: preserve the dense dashboard layout while making every label and control easier to scan. */
+.sentinel-shell { font-size: 14px; }
+.brand-name { font-size: 14px; }.brand-sub { font-size: 10px; }
+.privacy-pill { font-size: 11px; }.info-dot { font-size: 11px; }
+.nav-label, .metric-label, .panel-kicker { font-size: 11px; }.nav-item { font-size: 14px; }.nav-count { font-size: 11px; }
+.secure-box strong { font-size: 12px; }.secure-box small, .profile small { font-size: 11px; }.profile strong { font-size: 13px; }
+.sync-status { font-size: 12px; }.bell-badge { font-size: 10px; }.top-avatar { font-size: 11px; }
+.eyebrow { font-size: 11px; }.page-heading h1 { font-size: 30px; }.page-heading p, .panel-heading p { font-size: 13px; }
+.sync-button, .month-button { font-size: 12px; }.stage span, .stage strong, .stage small { font-size: 11px; }
+.metric-value { font-size: 26px; }.metric-value span { font-size: 12px; }.metric-foot { font-size: 11px; }
+.panel-heading h2 { font-size: 17px; }.weekdays { font-size: 10px; }.calendar-day { font-size: 12px; }.payment-chip b { font-size: 11px; }.payment-chip small { font-size: 9px; }.calendar-legend { font-size: 11px; }
+.forecast-risk { font-size: 12px; }.forecast-risk small { font-size: 11px; }.chart-axis { font-size: 10px; }.forecast-callout strong { font-size: 12px; }.forecast-callout p { font-size: 11px; }
+.simulate-badge, .assist-online { font-size: 11px; }.sim-input-row label, .emi-head label { font-size: 12px; }.input-hint { font-size: 11px; }.currency-input input { font-size: 13px; }.emi-head strong { font-size: 18px; }.slider-scale { font-size: 11px; }
+.simulation-result span { font-size: 10px; }.simulation-result strong { font-size: 17px; }.simulation-result small, .result-status { font-size: 11px; }.assistant-message p, .user-answer { font-size: 12px; }.suggested-query { font-size: 11px; }.query-box input { font-size: 12px; }.assistant-note { font-size: 10px; }.page-footer { font-size: 11px; }
+.drawer-heading h2 { font-size: 23px; }.drawer-heading p, .node-summary { font-size: 12px; }.notification-copy strong { font-size: 12px; }.notification-copy span, .notification-copy small { font-size: 10px; }.notification-copy p { font-size: 11px; }
+@media (max-width: 760px) { .page-heading h1 { font-size: 26px; }.metric-value { font-size: 22px; }.nav-item { font-size: 14px; } }
 .deck-theme .stage { border-color: var(--deck-line); }.deck-theme .stage.complete strong, .deck-theme .stage.complete span { color: var(--deck-teal); }.deck-theme .stage.active { background: #f0e6f6; box-shadow: inset 0 -2px var(--deck-purple); }.deck-theme .stage.active strong { color: var(--deck-purple); }.deck-theme .stage.active small { color: #86678f; }
 .deck-theme .metric-icon.teal { background: #d9f3e9; color: var(--deck-teal); }.deck-theme .metric-icon.blue { background: #e0e8fa; color: #5271bd; }.deck-theme .metric-icon.amber { background: #ffead5; color: var(--deck-orange); }.deck-theme .metric-icon.violet { background: #e9dcf1; color: var(--deck-purple); }
 .deck-theme .metric-foot, .deck-theme .calendar-day, .deck-theme .bar-chart { border-color: var(--deck-line); }.deck-theme .positive, .deck-theme .teal-text, .deck-theme .legend-note { color: var(--deck-teal); }.deck-theme .neutral { color: #5271bd; }.deck-theme .sync-button, .deck-theme .simulate-badge, .deck-theme .assist-online { color: var(--deck-teal); background: #e7f7f0; border-color: #b8e5d5; }.deck-theme .month-button, .deck-theme .theme-toggle { color: var(--deck-purple); background: #f0e6f6; border-color: #d4bedf; }.deck-theme .theme-toggle:hover { color: var(--deck-purple); border-color: var(--deck-purple); }
