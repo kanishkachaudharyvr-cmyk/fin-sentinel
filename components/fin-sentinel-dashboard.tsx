@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowUpRight, Bell, CalendarDays, Check, ChevronDown, ChevronRight, CircleHelp, Cpu, IndianRupee, LayoutDashboard, MessageSquareText, Mic, Moon, Network, PanelLeft, Search, ShieldCheck, SlidersHorizontal, Sparkles, Sun, WalletCards, X } from 'lucide-react'
 import { existingCommitment, formatCompactINR, formatINR, monthlyIncome, notifications, obligations, safetyThreshold } from '@/lib/fin-sentinel-data'
 import { parseNotifications } from '@/lib/parser'
@@ -32,15 +32,28 @@ export function FinSentinelDashboard() {
   const [queryAnswer, setQueryAnswer] = useState('')
   const [showNotifications, setShowNotifications] = useState(false)
   const [isDeckTheme, setIsDeckTheme] = useState(false)
+  const [summary, setSummary] = useState({ monthly_income: monthlyIncome, total_existing_commitments: existingCommitment, current_dti: (existingCommitment / monthlyIncome) * 100, risk_status: 'HEALTHY', dti_threshold: safetyThreshold })
+  const [calendar, setCalendar] = useState<typeof days>(days)
+  const [simulation, setSimulation] = useState({ projected_dti: ((existingCommitment + emi) / monthlyIncome) * 100, threshold_delta: 0, warning_reasons: [] as string[], risk_status: 'HEALTHY' })
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'
   const parsedEvents = useMemo(() => parseNotifications(notifications), [])
+  useEffect(() => {
+    Promise.all([fetch(`${apiBase}/api/financial/summary`), fetch(`${apiBase}/api/repayments/calendar`)]).then(async ([summaryResponse, calendarResponse]) => {
+      if (summaryResponse.ok) setSummary(await summaryResponse.json())
+      if (calendarResponse.ok) setCalendar(await calendarResponse.json())
+    }).catch(() => undefined)
+  }, [apiBase])
+  useEffect(() => {
+    fetch(`${apiBase}/api/simulate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ proposed_amount: 50000, proposed_emi: emi }) }).then(async (response) => { if (response.ok) setSimulation(await response.json()) }).catch(() => undefined)
+  }, [apiBase, emi])
   const graph = useMemo(() => reconstructLoanGraph(parsedEvents), [parsedEvents])
-  const total = existingCommitment + emi
-  const dti = (total / monthlyIncome) * 100
-  const isRisk = dti > safetyThreshold
+  const total = summary.total_existing_commitments + emi
+  const dti = simulation.projected_dti
+  const isRisk = simulation.risk_status === 'AT_RISK'
 
   function askQuery() {
     if (!query.trim()) return
-    setQueryAnswer(/meri|next|agli|kab/i.test(query) ? 'Aapki agli repayment ₹1,500 LazyPay ki 12 June ko due hai.' : 'I found five reconstructed obligations. Your next due payment is ₹1,500 on 12 June.')
+    fetch(`${apiBase}/api/query/assistant`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query }) }).then(async (response) => { if (response.ok) setQueryAnswer((await response.json()).answer) }).catch(() => setQueryAnswer('The local FIN SENTINEL backend is unavailable right now.'))
   }
 
   return (
