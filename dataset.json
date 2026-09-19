@@ -1,0 +1,14 @@
+[
+  {"id":"n1","lender":"LazyPay","language":"English","eventId":"lp-emi","message":"Reminder: Your LazyPay installment of Rs. 1,500 is payable by 12/06. Keep sufficient balance."},
+  {"id":"n2","lender":"LazyPay","language":"Hinglish","eventId":"lp-emi","message":"Aapki LazyPay EMI ₹1,500 ki 12 June ko due hai. Late fee se bachne ke liye pay karein."},
+  {"id":"n3","lender":"KreditBee","language":"English","eventId":"kb-emi","message":"KreditBee: EMI of ₹3,000 due on 24 June. Loan ref KB7F29."},
+  {"id":"n4","lender":"KreditBee","language":"English","eventId":"kb-loan","message":"Your KreditBee loan of ₹50,000 has been disbursed successfully. EMI starts 24/06."},
+  {"id":"n5","lender":"Amazon Pay Later","language":"English","eventId":"apl-emi","message":"Amazon Pay Later: ₹2,500 payment due on June 18. Pay now to avoid charges."},
+  {"id":"n6","lender":"Slice","language":"Hinglish","eventId":"slice-emi","message":"Slice bill reminder: ₹2,000 bharna hai 05 June tak. Your bill is ready."},
+  {"id":"n7","lender":"Slice","language":"English","eventId":"slice-emi","message":"Payment received. ₹2,000 paid towards Slice bill. Thank you!"},
+  {"id":"n8","lender":"HDFC Bank","language":"Marathi","eventId":"hdfc-emi","message":"HDFC Bank: तुमचा EMI ₹1,500 30 जून रोजी देय आहे."},
+  {"id":"n9","lender":"LazyPay","language":"English","eventId":"lp-disbursed","message":"LazyPay credit line activated. Your repayment schedule is available in the app."},
+  {"id":"n10","lender":"KreditBee","language":"Hinglish","eventId":"kb-emi","message":"Reminder: KreditBee ki ₹3,000 EMI 24 June ko due hai."},
+  {"id":"n11","lender":"Amazon Pay Later","language":"English","eventId":"apl-paid","message":"Amazon Pay Later payment successful: ₹2,500 received on 18 May."},
+  {"id":"n12","lender":"HDFC Bank","language":"English","eventId":"hdfc-emi","message":"Your HDFC Bank personal loan EMI of Rs 1,500 is due on 30/06."}
+]
