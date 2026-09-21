@@ -27,7 +27,6 @@ export const pool = globalForDb.finSentinelPool ?? new Pool({
     process.env.POSTGRES_URL_NON_POOLING ??
     process.env.DATABASE_URL_UNPOOLED ??
     process.env.DATABASE_URL,
-  options: '-c search_path=public',
 })
 if (process.env.NODE_ENV !== 'production') globalForDb.finSentinelPool = pool
 export const db = drizzle(pool)
