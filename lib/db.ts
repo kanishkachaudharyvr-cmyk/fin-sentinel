@@ -22,6 +22,11 @@ export const obligationsTable = pgTable('fin_sentinel_obligations', {
 })
 
 const globalForDb = globalThis as unknown as { finSentinelPool?: Pool }
-export const pool = globalForDb.finSentinelPool ?? new Pool({ connectionString: process.env.DATABASE_URL })
+export const pool = globalForDb.finSentinelPool ?? new Pool({
+  connectionString:
+    process.env.POSTGRES_URL_NON_POOLING ??
+    process.env.DATABASE_URL_UNPOOLED ??
+    process.env.DATABASE_URL,
+})
 if (process.env.NODE_ENV !== 'production') globalForDb.finSentinelPool = pool
 export const db = drizzle(pool)
