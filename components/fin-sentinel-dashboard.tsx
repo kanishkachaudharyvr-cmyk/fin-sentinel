@@ -24,7 +24,7 @@ const days = [
 
 function money(amount: number) { return formatCompactINR(amount).replace('₹', '₹') }
 
-export function FinSentinelDashboard() {
+export function FinSentinelDashboard({ userName = 'Kanishka' }: { userName?: string }) {
   const [activeNav, setActiveNav] = useState('Overview')
   const [emi, setEmi] = useState(4500)
   const [showWhy, setShowWhy] = useState(false)
@@ -113,7 +113,7 @@ export function FinSentinelDashboard() {
       <section className="main-area">
         <header className="topbar"><div className="mobile-brand"><div className="brand-mark"><ShieldCheck size={17} /></div><span>FIN SENTINEL</span></div><div className="topbar-right"><span className="sync-status"><span className="green-dot" /> {syncMessage}</span><button className="icon-button" aria-label="Notifications" onClick={() => setShowNotifications(true)}><Bell size={18} /><span className="bell-badge">3</span></button><button className="theme-toggle" aria-label={isDeckTheme ? 'Use dark theme' : 'Use pitch deck theme'} onClick={() => setIsDeckTheme(!isDeckTheme)}>{isDeckTheme ? <Moon size={16} /> : <Sun size={16} />}<span>{isDeckTheme ? 'Dark' : 'Deck'}</span></button><button className="top-avatar">KC</button></div></header>
         <div className="content-wrap">
-          <div className="page-heading"><div><div className="eyebrow"><span className="live-line" /> FINANCIAL HEALTH OVERVIEW</div><h1>Good morning, Kanishka.</h1><p>Here&apos;s your complete repayment picture for June 2026.</p></div><button className="sync-button" onClick={refreshData} disabled={syncing}><Sparkles size={15} /> {syncing ? 'Scanning…' : 'Re-scan notifications'}</button></div>
+          <div className="page-heading"><div><div className="eyebrow"><span className="live-line" /> FINANCIAL HEALTH OVERVIEW</div><h1>Good morning, {userName}.</h1><p>Here&apos;s your complete repayment picture for June 2026.</p></div><button className="sync-button" onClick={refreshData} disabled={syncing}><Sparkles size={15} /> {syncing ? 'Scanning…' : 'Re-scan notifications'}</button></div>
 
           <div className="stage-strip" aria-label="Financial workflow"><button className="stage complete" onClick={() => setActiveNav('Notifications')}><span>01</span><strong>RECONSTRUCT</strong><small>{notifications.length} signals found</small></button><button className="stage complete" onClick={() => setActiveNav('Repayment graph')}><span>02</span><strong>FORECAST</strong><small>{obligationCount} obligations linked</small></button><button className="stage active" onClick={() => document.querySelector('.simulator-panel')?.scrollIntoView({ behavior: 'smooth' })}><span>03</span><strong>SIMULATE</strong><small>Try before you borrow</small></button><button className="stage" onClick={() => document.querySelector('.forecast-panel')?.scrollIntoView({ behavior: 'smooth' })}><span>04</span><strong>PROTECT</strong><small>Threshold monitoring</small></button><button className="stage" onClick={() => setShowWhy(true)}><span>05</span><strong>EXPLAIN</strong><small>Plain-language insights</small></button></div>
           {dataError && <div className="data-banner" role="status"><CircleHelp size={15} /> {dataError}</div>}
