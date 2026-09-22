@@ -5,14 +5,12 @@ plugins {
 
 android {
     namespace = "com.finsentinel.app"
-    compileSdk {
-        version = release(37)
-    }
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.finsentinel.app"
         minSdk = 24
-        targetSdk = 37
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 
