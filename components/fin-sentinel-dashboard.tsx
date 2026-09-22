@@ -41,6 +41,9 @@ export function FinSentinelDashboard({ userName = 'Kanishka' }: { userName?: str
   const [calendar, setCalendar] = useState<typeof days>(days)
   const [simulation, setSimulation] = useState({ projected_dti: ((existingCommitment + emi) / monthlyIncome) * 100, threshold_delta: 0, warning_reasons: [] as string[], risk_status: 'HEALTHY' })
   const [dataError, setDataError] = useState('')
+  const [deviceRecords, setDeviceRecords] = useState<Array<{ id: string; source: string; amount: number; dueDate: string; notificationText: string; detectedAt: string; provenance: string }>>([])
+  const [deviceStatus, setDeviceStatus] = useState('Waiting for notification data')
+  const [lastDeviceSync, setLastDeviceSync] = useState<string | null>(null)
   const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || ''
   const profileIncome = summary.monthly_income || monthlyIncome
   const profileCommitment = summary.total_existing_commitments || existingCommitment
@@ -48,10 +51,16 @@ export function FinSentinelDashboard({ userName = 'Kanishka' }: { userName?: str
   const obligationCount = calendar.length || obligations.length
   const parsedEvents = useMemo(() => parseNotifications(notifications), [])
   useEffect(() => {
-    Promise.all([fetch(`${apiBase}/api/financial/summary`), fetch(`${apiBase}/api/repayments/calendar`)]).then(async ([summaryResponse, calendarResponse]) => {
+    Promise.all([fetch(`${apiBase}/api/financial/summary`), fetch(`${apiBase}/api/repayments/calendar`), fetch(`${apiBase}/api/device/emi`)]).then(async ([summaryResponse, calendarResponse, deviceResponse]) => {
       if (!summaryResponse.ok || !calendarResponse.ok) throw new Error('Unable to load financial data')
       setSummary(await summaryResponse.json())
       setCalendar(await calendarResponse.json())
+      if (deviceResponse.ok) {
+        const deviceData = await deviceResponse.json()
+        setDeviceRecords(deviceData.records ?? [])
+        setDeviceStatus(deviceData.deviceStatus ?? 'Waiting for notification data')
+        setLastDeviceSync(deviceData.lastSynced ?? null)
+      }
       setDataError('')
     }).catch(() => setDataError('Live data is unavailable. Showing the last local snapshot.'))
   }, [apiBase])
@@ -116,7 +125,10 @@ export function FinSentinelDashboard({ userName = 'Kanishka' }: { userName?: str
           <div className="page-heading"><div><div className="eyebrow"><span className="live-line" /> FINANCIAL HEALTH OVERVIEW</div><h1>Good morning, {userName}.</h1><p>Here&apos;s your complete repayment picture for June 2026.</p></div><button className="sync-button" onClick={refreshData} disabled={syncing}><Sparkles size={15} /> {syncing ? 'Scanning…' : 'Re-scan notifications'}</button></div>
 
           <div className="stage-strip" aria-label="Financial workflow"><button className="stage complete" onClick={() => setActiveNav('Notifications')}><span>01</span><strong>RECONSTRUCT</strong><small>{notifications.length} signals found</small></button><button className="stage complete" onClick={() => setActiveNav('Repayment graph')}><span>02</span><strong>FORECAST</strong><small>{obligationCount} obligations linked</small></button><button className="stage active" onClick={() => document.querySelector('.simulator-panel')?.scrollIntoView({ behavior: 'smooth' })}><span>03</span><strong>SIMULATE</strong><small>Try before you borrow</small></button><button className="stage" onClick={() => document.querySelector('.forecast-panel')?.scrollIntoView({ behavior: 'smooth' })}><span>04</span><strong>PROTECT</strong><small>Threshold monitoring</small></button><button className="stage" onClick={() => setShowWhy(true)}><span>05</span><strong>EXPLAIN</strong><small>Plain-language insights</small></button></div>
+          <div className={`device-sync-card ${deviceRecords.length ? 'connected' : ''}`} role="status"><div className="device-sync-icon"><Cpu size={17} /></div><div><strong>{deviceStatus}</strong><p>{lastDeviceSync ? `Last synced ${new Date(lastDeviceSync).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}` : 'Connect the Android app to automatically import eligible EMI notifications.'}</p></div><span className="device-sync-source">Android pipeline</span></div>
           {dataError && <div className="data-banner" role="status"><CircleHelp size={15} /> {dataError}</div>}
+          {deviceRecords.length > 0 && <section className="panel device-records-panel"><div className="panel-heading"><div><div className="panel-kicker"><Cpu size={14} /> LIVE DEVICE DATA</div><h2>Detected EMI records</h2><p>Validated notifications received from your connected Android device.</p></div><span className="device-record-count">{deviceRecords.length} active</span></div><div className="device-record-grid">{deviceRecords.map((record) => <article className="device-record" key={record.id}><div className="device-record-top"><strong>{record.source}</strong><span>{money(record.amount)}</span></div><div className="device-record-meta"><span>Due {new Date(`${record.dueDate}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span><span>{record.provenance}</span></div><p>{record.notificationText}</p></article>)}</div></section>}
+          {!deviceRecords.length && <div className="device-empty-state"><Cpu size={18} /><div><strong>No EMI notifications detected yet</strong><p>FIN SENTINEL will automatically add eligible EMI records when your connected device sends notification data.</p></div></div>}
 
           <div className="metric-grid"><div className="metric-card"><div className="metric-icon teal"><WalletCards size={18} /></div><div className="metric-label">EXISTING COMMITMENT</div><div className="metric-value">{money(profileCommitment)}<span>/ month</span></div><div className="metric-foot"><span className="positive"><ArrowUpRight size={13} /> 5 obligations</span><span>deduplicated</span></div></div><div className="metric-card"><div className="metric-icon blue"><IndianRupee size={18} /></div><div className="metric-label">MONTHLY INCOME</div><div className="metric-value">{money(profileIncome)}<span>net income</span></div><div className="metric-foot"><span className="neutral"><Check size={13} /> User-provided</span><span>June 2026</span></div></div><div className={`metric-card ${isRisk ? 'risk-metric' : ''}`}><div className="metric-icon amber"><AlertTriangle size={18} /></div><div className="metric-label">CURRENT DTI RATIO</div><div className="metric-value">{(profileCommitment / profileIncome * 100).toFixed(1)}<span>%</span></div><div className="metric-foot"><span className="positive"><Check size={13} /> Below {safetyThreshold}% threshold</span><span>healthy</span></div></div><div className="metric-card"><div className="metric-icon violet"><CalendarDays size={18} /></div><div className="metric-label">NEXT PAYMENT</div><div className="metric-value">₹1,500<span>in 12 days</span></div><div className="metric-foot"><span className="lender-dot" /> LazyPay BNPL <span>12 Jun</span></div></div></div>
 
