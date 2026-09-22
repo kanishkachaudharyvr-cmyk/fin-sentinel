@@ -78,11 +78,12 @@ export function FinSentinelDashboard({ userName = 'Kanishka' }: { userName?: str
 
   const fetchAllData = async () => {
     try {
+      const headers = { 'Bypass-Tunnel-Reminder': 'true' }
       const [summaryRes, calendarRes, deviceRes, streamRes] = await Promise.all([
-        fetch(`${apiBase}/api/financial/summary`),
-        fetch(`${apiBase}/api/repayments/calendar`),
-        fetch(`${apiBase}/api/device/notifications`),
-        fetch(`${apiBase}/api/notifications/stream`)
+        fetch(`${apiBase}/api/financial/summary`, { headers }),
+        fetch(`${apiBase}/api/repayments/calendar`, { headers }),
+        fetch(`${apiBase}/api/device/notifications`, { headers }),
+        fetch(`${apiBase}/api/notifications/stream`, { headers })
       ])
       
       if (summaryRes.ok) setSummary(await summaryRes.json())
@@ -107,7 +108,7 @@ export function FinSentinelDashboard({ userName = 'Kanishka' }: { userName?: str
     return () => clearInterval(interval)
   }, [apiBase])
   useEffect(() => {
-    fetch(`${apiBase}/api/simulate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ proposed_amount: 50000, proposed_emi: emi }) }).then(async (response) => { if (response.ok) setSimulation(await response.json()) }).catch(() => undefined)
+    fetch(`${apiBase}/api/simulate`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Bypass-Tunnel-Reminder': 'true' }, body: JSON.stringify({ proposed_amount: 50000, proposed_emi: emi }) }).then(async (response) => { if (response.ok) setSimulation(await response.json()) }).catch(() => undefined)
   }, [apiBase, emi])
   const graph = useMemo(() => reconstructLoanGraph(parsedEvents), [parsedEvents])
   const total = profileCommitment + emi
@@ -116,11 +117,12 @@ export function FinSentinelDashboard({ userName = 'Kanishka' }: { userName?: str
 
   function refreshData() {
     setSyncing(true)
-    Promise.all([fetch(`${apiBase}/api/financial/summary`), fetch(`${apiBase}/api/repayments/calendar`)]).then(async ([summaryResponse, calendarResponse]) => {
+    const headers = { 'Bypass-Tunnel-Reminder': 'true' }
+    Promise.all([fetch(`${apiBase}/api/financial/summary`, { headers }), fetch(`${apiBase}/api/repayments/calendar`, { headers })]).then(async ([summaryResponse, calendarResponse]) => {
       if (summaryResponse.ok) setSummary(await summaryResponse.json())
       if (!summaryResponse.ok || !calendarResponse.ok) throw new Error('Sync failed')
       setSummary(await summaryResponse.json())
-      setCalendar(await calendarResponse.json())
+      setCalendar(mapCalendarDays(await calendarResponse.json()))
       setDataError('')
       setSyncMessage('Synced just now')
     }).catch(() => setSyncMessage('Using local snapshot')).finally(() => setSyncing(false))
@@ -141,7 +143,7 @@ export function FinSentinelDashboard({ userName = 'Kanishka' }: { userName?: str
 
   function askQuery() {
     if (!query.trim()) return
-    fetch(`${apiBase}/api/query/assistant`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query }) }).then(async (response) => {
+    fetch(`${apiBase}/api/query/assistant`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Bypass-Tunnel-Reminder': 'true' }, body: JSON.stringify({ query }) }).then(async (response) => {
       if (!response.ok) throw new Error('assistant unavailable')
       const answer = (await response.json()).answer
       setQueryAnswer(answer)
