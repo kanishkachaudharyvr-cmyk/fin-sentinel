@@ -51,7 +51,8 @@ export function FinSentinelDashboard({ userName = 'Kanishka' }: { userName?: str
   const obligationCount = calendar.length || obligations.length
   const parsedEvents = useMemo(() => parseNotifications(notifications), [])
   useEffect(() => {
-    Promise.all([fetch(`${apiBase}/api/financial/summary`), fetch(`${apiBase}/api/repayments/calendar`), fetch(`${apiBase}/api/device/emi`)]).then(async ([summaryResponse, calendarResponse, deviceResponse]) => {
+    // Initial fetch for everything
+    Promise.all([fetch(`${apiBase}/api/financial/summary`), fetch(`${apiBase}/api/repayments/calendar`), fetch(`${apiBase}/api/device/notifications`)]).then(async ([summaryResponse, calendarResponse, deviceResponse]) => {
       if (!summaryResponse.ok || !calendarResponse.ok) throw new Error('Unable to load financial data')
       setSummary(await summaryResponse.json())
       setCalendar(await calendarResponse.json())
@@ -63,6 +64,20 @@ export function FinSentinelDashboard({ userName = 'Kanishka' }: { userName?: str
       }
       setDataError('')
     }).catch(() => setDataError('Live data is unavailable. Showing the last local snapshot.'))
+
+    // Polling interval for device notifications and live updates
+    const interval = setInterval(() => {
+      fetch(`${apiBase}/api/device/notifications`).then(async (res) => {
+        if (res.ok) {
+          const deviceData = await res.json()
+          setDeviceRecords(deviceData.records ?? [])
+          setDeviceStatus(deviceData.deviceStatus ?? 'Waiting for notification data')
+          setLastDeviceSync(deviceData.lastSynced ?? null)
+        }
+      }).catch(() => {}) // Fail silently on interval
+    }, 2000)
+
+    return () => clearInterval(interval)
   }, [apiBase])
   useEffect(() => {
     fetch(`${apiBase}/api/simulate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ proposed_amount: 50000, proposed_emi: emi }) }).then(async (response) => { if (response.ok) setSimulation(await response.json()) }).catch(() => undefined)

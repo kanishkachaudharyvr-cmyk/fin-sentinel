@@ -40,3 +40,23 @@ class UserProfile(Base):
     id = Column(Integer, primary_key=True)
     monthly_income = Column(Float, default=35000)
     dti_threshold = Column(Float, default=40.0)
+
+class DeviceNotification(Base):
+    __tablename__ = "device_notifications"
+    id = Column(Integer, primary_key=True)
+    source_app = Column(String(120), nullable=True)
+    package_name = Column(String(120), nullable=True)
+    title = Column(String(255), nullable=True)
+    notification_text = Column(Text, nullable=True)
+    is_emi = Column(Integer, default=0) # SQLite doesn't have boolean, integer is fine (1/0)
+    amount = Column(Float, nullable=True)
+    due_date = Column(String(60), nullable=True)
+    detected_at = Column(String(60), nullable=True)
+    received_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    data_source = Column(String(60), default="LIVE_DEVICE_DATA")
+
+class DeviceConnection(Base):
+    __tablename__ = "device_connections"
+    id = Column(Integer, primary_key=True)
+    last_heartbeat = Column(DateTime, default=datetime.utcnow, nullable=False)
+
