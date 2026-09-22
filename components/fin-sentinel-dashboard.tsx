@@ -2,30 +2,31 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowUpRight, Bell, CalendarDays, Check, ChevronDown, ChevronRight, CircleHelp, Cpu, IndianRupee, LayoutDashboard, MessageSquareText, Mic, Moon, Network, PanelLeft, Search, ShieldCheck, SlidersHorizontal, Sparkles, Sun, WalletCards, X } from 'lucide-react'
-import { existingCommitment, formatCompactINR, formatINR, monthlyIncome, notifications, obligations, safetyThreshold } from '@/lib/fin-sentinel-data'
 import { parseNotifications } from '@/lib/parser'
 import { reconstructLoanGraph } from '@/lib/graph_engine'
 
-const nav = [
-  { label: 'Overview', icon: LayoutDashboard },
-  { label: 'Notifications', icon: MessageSquareText, count: notifications.length },
-  { label: 'Repayment graph', icon: Network },
-  { label: 'Simulator', icon: SlidersHorizontal },
-]
-
-const days = [
-  { day: 1, muted: true }, { day: 2, muted: true }, { day: 3, muted: true }, { day: 4, muted: true },
-  { day: 5, amount: 2000, lender: 'Slice', color: '#b48cff' }, { day: 6 }, { day: 7 },
-  { day: 8 }, { day: 9 }, { day: 10 }, { day: 11 }, { day: 12, amount: 1500, lender: 'LazyPay', color: '#44d7a8' },
-  { day: 13 }, { day: 14 }, { day: 15 }, { day: 16 }, { day: 17 }, { day: 18, amount: 2500, lender: 'Amazon Pay', color: '#7aa7ff' },
-  { day: 19 }, { day: 20 }, { day: 21 }, { day: 22 }, { day: 23 }, { day: 24, amount: 3000, lender: 'KreditBee', color: '#f4b860' },
-  { day: 25 }, { day: 26 }, { day: 27 }, { day: 28 }, { day: 29 }, { day: 30, amount: 1500, lender: 'HDFC Bank', color: '#ef8b8b' },
-]
-
-function money(amount: number) { return formatCompactINR(amount).replace('₹', '₹') }
+function money(amount: number) { 
+  return `₹${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(amount)}`
+}
+function formatINR(amount: number) {
+  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount)
+}
 
 export function FinSentinelDashboard({ userName = 'Kanishka' }: { userName?: string }) {
   const [activeNav, setActiveNav] = useState('Overview')
+  
+  // Real backend state
+  const [summary, setSummary] = useState({ monthly_income: 35000, total_existing_commitments: 0, current_dti: 0, risk_status: 'HEALTHY', dti_threshold: 40 })
+  const [calendar, setCalendar] = useState<any[]>([])
+  const [notifications, setNotifications] = useState<any[]>([])
+  
+  const nav = [
+    { label: 'Overview', icon: LayoutDashboard },
+    { label: 'Notifications', icon: MessageSquareText, count: notifications.length },
+    { label: 'Repayment graph', icon: Network },
+    { label: 'Simulator', icon: SlidersHorizontal },
+  ]
+
   const [emi, setEmi] = useState(4500)
   const [showWhy, setShowWhy] = useState(false)
   const [query, setQuery] = useState('')
@@ -37,46 +38,72 @@ export function FinSentinelDashboard({ userName = 'Kanishka' }: { userName?: str
   const [voiceEnabled, setVoiceEnabled] = useState(false)
   const [monthOffset, setMonthOffset] = useState(0)
   const [forecastDetails, setForecastDetails] = useState(false)
-  const [summary, setSummary] = useState({ monthly_income: monthlyIncome, total_existing_commitments: existingCommitment, current_dti: (existingCommitment / monthlyIncome) * 100, risk_status: 'HEALTHY', dti_threshold: safetyThreshold })
-  const [calendar, setCalendar] = useState<typeof days>(days)
-  const [simulation, setSimulation] = useState({ projected_dti: ((existingCommitment + emi) / monthlyIncome) * 100, threshold_delta: 0, warning_reasons: [] as string[], risk_status: 'HEALTHY' })
+  
+  // Real backend state
+  const [summary, setSummary] = useState({ monthly_income: 35000, total_existing_commitments: 0, current_dti: 0, risk_status: 'HEALTHY', dti_threshold: 40 })
+  const [calendar, setCalendar] = useState<any[]>([])
+  const [notifications, setNotifications] = useState<any[]>([])
+  
+  const [simulation, setSimulation] = useState({ projected_dti: 0, threshold_delta: 0, warning_reasons: [] as string[], risk_status: 'HEALTHY' })
   const [dataError, setDataError] = useState('')
-  const [deviceRecords, setDeviceRecords] = useState<Array<{ id: string; source: string; amount: number; dueDate: string; notificationText: string; detectedAt: string; provenance: string }>>([])
+  const [deviceRecords, setDeviceRecords] = useState<Array<{ id: string; source: string; amount: number; dueDate: string; notificationText: string; detectedAt: string; provenance: string; isEmi: boolean }>>([])
   const [deviceStatus, setDeviceStatus] = useState('Waiting for notification data')
   const [lastDeviceSync, setLastDeviceSync] = useState<string | null>(null)
+  
   const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || ''
-  const profileIncome = summary.monthly_income || monthlyIncome
-  const profileCommitment = summary.total_existing_commitments || existingCommitment
-  const profileThreshold = summary.dti_threshold || safetyThreshold
-  const obligationCount = calendar.length || obligations.length
-  const parsedEvents = useMemo(() => parseNotifications(notifications), [])
-  useEffect(() => {
-    // Initial fetch for everything
-    Promise.all([fetch(`${apiBase}/api/financial/summary`), fetch(`${apiBase}/api/repayments/calendar`), fetch(`${apiBase}/api/device/notifications`)]).then(async ([summaryResponse, calendarResponse, deviceResponse]) => {
-      if (!summaryResponse.ok || !calendarResponse.ok) throw new Error('Unable to load financial data')
-      setSummary(await summaryResponse.json())
-      setCalendar(await calendarResponse.json())
-      if (deviceResponse.ok) {
-        const deviceData = await deviceResponse.json()
+  
+  const profileIncome = summary.monthly_income
+  const profileCommitment = summary.total_existing_commitments
+  const profileThreshold = summary.dti_threshold
+  const obligationCount = calendar.length
+  const parsedEvents = useMemo(() => parseNotifications(notifications.map(n => ({ ...n, message: n.text }))), [notifications])
+
+  const mapCalendarDays = (apiCalendar: any[]) => {
+    // Generate an empty 30-day month grid
+    const days = Array.from({ length: 30 }, (_, i) => ({ day: i + 1, muted: i < 4, amount: 0, lender: '', color: '' }))
+    apiCalendar.forEach(item => {
+      const date = new Date(item.due_date)
+      const day = date.getDate()
+      if (day >= 1 && day <= 30) {
+        days[day - 1] = { 
+          ...days[day - 1], 
+          amount: item.amount, 
+          lender: item.lender, 
+          color: item.status === 'Due' ? '#f4b860' : '#44d7a8' 
+        }
+      }
+    })
+    return days
+  }
+
+  const fetchAllData = async () => {
+    try {
+      const [summaryRes, calendarRes, deviceRes, streamRes] = await Promise.all([
+        fetch(`${apiBase}/api/financial/summary`),
+        fetch(`${apiBase}/api/repayments/calendar`),
+        fetch(`${apiBase}/api/device/notifications`),
+        fetch(`${apiBase}/api/notifications/stream`)
+      ])
+      
+      if (summaryRes.ok) setSummary(await summaryRes.json())
+      if (calendarRes.ok) setCalendar(mapCalendarDays(await calendarRes.json()))
+      if (streamRes.ok) setNotifications(await streamRes.json())
+      
+      if (deviceRes.ok) {
+        const deviceData = await deviceRes.json()
         setDeviceRecords(deviceData.records ?? [])
         setDeviceStatus(deviceData.deviceStatus ?? 'Waiting for notification data')
         setLastDeviceSync(deviceData.lastSynced ?? null)
       }
       setDataError('')
-    }).catch(() => setDataError('Live data is unavailable. Showing the last local snapshot.'))
+    } catch (err) {
+      setDataError('Live data is unavailable. Please start the backend.')
+    }
+  }
 
-    // Polling interval for device notifications and live updates
-    const interval = setInterval(() => {
-      fetch(`${apiBase}/api/device/notifications`).then(async (res) => {
-        if (res.ok) {
-          const deviceData = await res.json()
-          setDeviceRecords(deviceData.records ?? [])
-          setDeviceStatus(deviceData.deviceStatus ?? 'Waiting for notification data')
-          setLastDeviceSync(deviceData.lastSynced ?? null)
-        }
-      }).catch(() => {}) // Fail silently on interval
-    }, 2000)
-
+  useEffect(() => {
+    fetchAllData()
+    const interval = setInterval(fetchAllData, 2000)
     return () => clearInterval(interval)
   }, [apiBase])
   useEffect(() => {
