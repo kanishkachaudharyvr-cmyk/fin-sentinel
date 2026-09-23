@@ -1,5 +1,5 @@
 import { drizzle } from 'drizzle-orm/node-postgres'
-import { pgTable, text, integer } from 'drizzle-orm/pg-core'
+import { pgTable, text, integer, date, timestamp } from 'drizzle-orm/pg-core'
 import { Pool } from 'pg'
 
 export const profiles = pgTable('fin_sentinel_profiles', {
@@ -19,6 +19,18 @@ export const obligationsTable = pgTable('fin_sentinel_obligations', {
   status: text('status').notNull(),
   sourceCount: integer('source_count').notNull(),
   color: text('color').notNull(),
+})
+
+export const deviceEmiRecords = pgTable('fin_sentinel_device_emi_records', {
+  id: text('id').primaryKey(),
+  profileId: text('profile_id').notNull(),
+  source: text('source').notNull(),
+  packageName: text('package_name'),
+  amount: integer('amount').notNull(),
+  dueDate: date('due_date').notNull(),
+  notificationText: text('notification_text').notNull(),
+  detectedAt: timestamp('detected_at').notNull(),
+  createdAt: timestamp('created_at').notNull(),
 })
 
 const globalForDb = globalThis as unknown as { finSentinelPool?: Pool }

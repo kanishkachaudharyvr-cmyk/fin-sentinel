@@ -28,8 +28,24 @@ next-env.d.ts
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
+.venv/
+venv/
 
 # SQLite temporary files
 *.db-shm
 *.db-wal
+
+# Android / Gradle
+.gradle/
+local.properties
+
+# Android Studio
+.idea/
+*.iml
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

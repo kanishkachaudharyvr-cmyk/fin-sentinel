@@ -7,9 +7,10 @@ from sqlalchemy.orm import Session
 
 from database import get_db, init_db
 from graph_engine import active_cycles, find_or_create_cycle
-from models import LoanObligation, RawNotification
+from models import LoanObligation, RawNotification, DeviceNotification, DeviceConnection
 from nlp_engine import parse_notification
 from stress_engine import simulate, summary
+from typing import Optional
 
 
 app = FastAPI(title="FIN SENTINEL API")
@@ -58,6 +59,16 @@ class QueryIn(BaseModel):
 # HEALTH
 # ============================================================
 
+class DeviceNotificationIn(BaseModel):
+    source: Optional[str] = None
+    packageName: Optional[str] = None
+    title: Optional[str] = None
+    text: Optional[str] = None
+    amount: Optional[float] = None
+    dueDate: Optional[str] = None
+    isEmi: bool = False
+    detectedAt: Optional[str] = None
+
 @app.get("/api/health")
 def health():
     return {"ok": True}
@@ -78,6 +89,88 @@ def device_heartbeat():
 # ============================================================
 # EXISTING NOTIFICATION INGEST
 # ============================================================
+
+@app.post("/api/device/heartbeat")
+def device_heartbeat(db: Session = Depends(get_db)):
+    conn = db.query(DeviceConnection).first()
+    if not conn:
+        conn = DeviceConnection()
+        db.add(conn)
+    conn.last_heartbeat = datetime.utcnow()
+    db.commit()
+    return {"status": "ok"}
+
+@app.post("/api/device/notifications")
+def device_notifications_post(payload: DeviceNotificationIn, db: Session = Depends(get_db)):
+    # Update heartbeat implicitly on valid notification
+    conn = db.query(DeviceConnection).first()
+    if not conn:
+        conn = DeviceConnection()
+        db.add(conn)
+    conn.last_heartbeat = datetime.utcnow()
+    
+    notif = DeviceNotification(
+        source_app=payload.source,
+        package_name=payload.packageName,
+        title=payload.title,
+        notification_text=payload.text,
+        is_emi=1 if payload.isEmi else 0,
+        amount=payload.amount,
+        due_date=payload.dueDate,
+        detected_at=payload.detectedAt
+    )
+    db.add(notif)
+    db.flush()
+    
+    # Connect to existing reconstruction pipeline if it's an EMI
+    if payload.isEmi and payload.amount and payload.dueDate:
+        parsed = {
+            "is_emi": True,
+            "amount": payload.amount,
+            "due_date": payload.dueDate,
+            "lender": payload.source or payload.packageName or "Unknown",
+            "language": "English",
+            "confidence": 0.95
+        }
+        item = RawNotification(sender_id=parsed["lender"], body=payload.text or "", language="English", status="PROCESSED", received_at=datetime.utcnow())
+        db.add(item)
+        db.flush()
+        find_or_create_cycle(db, parsed, item.id)
+        
+    db.commit()
+    return {"status": "ok"}
+
+@app.get("/api/device/notifications")
+def device_notifications_get(db: Session = Depends(get_db)):
+    conn = db.query(DeviceConnection).first()
+    device_status = "Waiting for notification data"
+    if conn:
+        delta = (datetime.utcnow() - conn.last_heartbeat).total_seconds()
+        if delta < 60:
+            device_status = "CONNECTED\nListening to device notifications"
+        else:
+            device_status = "STALE\nDevice not seen recently"
+
+    records = []
+    for n in db.query(DeviceNotification).order_by(DeviceNotification.received_at.desc()).limit(50).all():
+        records.append({
+            "id": str(n.id),
+            "source": n.source_app or "Unknown",
+            "amount": n.amount or 0,
+            "dueDate": n.due_date or "",
+            "notificationText": n.notification_text or n.title or "",
+            "detectedAt": n.detected_at or n.received_at.isoformat(),
+            "provenance": n.data_source,
+            "isEmi": bool(n.is_emi)
+        })
+    
+    last_synced = conn.last_heartbeat.isoformat() if conn else None
+    
+    return {
+        "records": records,
+        "deviceStatus": device_status,
+        "lastSynced": last_synced
+    }
 
 @app.post("/api/notifications/ingest")
 def ingest(

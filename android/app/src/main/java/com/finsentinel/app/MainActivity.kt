@@ -24,14 +24,26 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        if (!isNotificationAccessEnabled()) {
+            try {
+                val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                startActivity(intent)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         setContent {
             FINSENTINELTheme {
                 NotificationAccessScreen(
                     isNotificationAccessEnabled = isNotificationAccessEnabled(),
                     onEnableClick = {
-                        val intent =
-                            Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                        startActivity(intent)
+                        try {
+                            val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                            startActivity(intent)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
                     }
                 )
             }
@@ -46,9 +58,12 @@ class MainActivity : ComponentActivity() {
                 NotificationAccessScreen(
                     isNotificationAccessEnabled = isNotificationAccessEnabled(),
                     onEnableClick = {
-                        val intent =
-                            Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                        startActivity(intent)
+                        try {
+                            val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                            startActivity(intent)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
                     }
                 )
             }
@@ -56,18 +71,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun isNotificationAccessEnabled(): Boolean {
-        val enabledListeners =
-            Settings.Secure.getString(
-                contentResolver,
-                "enabled_notification_listeners"
-            ) ?: return false
-
-        val componentName = ComponentName(
-            this,
-            NotificationListener::class.java
-        )
-
-        return enabledListeners.contains(componentName.flattenToString())
+        val packageName = packageName
+        val enabledPackages = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(this)
+        return enabledPackages.contains(packageName)
     }
 }
 
