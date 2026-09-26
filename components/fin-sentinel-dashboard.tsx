@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -39,6 +40,7 @@ import {
 
 import { parseNotifications } from '@/lib/parser'
 import { reconstructLoanGraph } from '@/lib/graph_engine'
+import { authClient } from '@/lib/auth-client'
 
 const days = [
   { day: 1, muted: true },
@@ -78,10 +80,14 @@ function money(amount: number) {
 }
 
 export function FinSentinelDashboard({
-  userName = 'Kanishka',
+  userName: initialUserName = 'Kanishka',
 }: {
   userName?: string
 }) {
+  const router = useRouter()
+  const [authReady, setAuthReady] = useState(false)
+  const [userName, setUserName] = useState(initialUserName)
+  const [userEmail, setUserEmail] = useState('')
   const [activeNav, setActiveNav] = useState('Overview')
   const [emi, setEmi] = useState(4500)
   const [showWhy, setShowWhy] = useState(false)
@@ -114,10 +120,6 @@ export function FinSentinelDashboard({
 
   const [dataError, setDataError] = useState('')
 
-  // ============================================================
-  // LIVE ANDROID DEVICE DATA
-  // ============================================================
-
   const [liveNotifications, setLiveNotifications] = useState<any[]>([])
   const [deviceStatus, setDeviceStatus] = useState(
     'Waiting for notification data'
@@ -125,6 +127,40 @@ export function FinSentinelDashboard({
   const [lastDeviceSync, setLastDeviceSync] = useState<string | null>(null)
 
   const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || ''
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function checkAuthentication() {
+      const result = await authClient.getMe()
+
+      if (cancelled) return
+
+      if (result.error || !result.data) {
+        router.replace('/sign-in')
+        return
+      }
+
+      const authenticatedName =
+        result.data.name ||
+        result.data.user?.name ||
+        initialUserName
+
+      setUserName(authenticatedName)
+      setUserEmail(
+        result.data.email ||
+        result.data.user?.email ||
+        ''
+      )
+      setAuthReady(true)
+    }
+
+    checkAuthentication()
+
+    return () => {
+      cancelled = true
+    }
+  }, [router, initialUserName])
 
   const profileIncome = summary.monthly_income || monthlyIncome
   const profileCommitment =
@@ -138,14 +174,16 @@ export function FinSentinelDashboard({
     []
   )
 
-  // ============================================================
-  // FETCH FINANCIAL SUMMARY + CALENDAR
-  // ============================================================
-
   useEffect(() => {
+    if (!authReady) return
+
     Promise.all([
-      fetch(`${apiBase}/api/financial/summary`),
-      fetch(`${apiBase}/api/repayments/calendar`),
+      fetch(`${apiBase}/api/financial/summary`, {
+        credentials: 'include',
+      }),
+      fetch(`${apiBase}/api/repayments/calendar`, {
+        credentials: 'include',
+      }),
     ])
       .then(async ([summaryResponse, calendarResponse]) => {
         if (!summaryResponse.ok || !calendarResponse.ok) {
@@ -161,13 +199,11 @@ export function FinSentinelDashboard({
           'Live data is unavailable. Showing the last local snapshot.'
         )
       )
-  }, [apiBase])
-
-  // ============================================================
-  // LIVE ANDROID NOTIFICATION POLLING
-  // ============================================================
+  }, [apiBase, authReady])
 
   useEffect(() => {
+    if (!authReady) return
+
     let cancelled = false
 
     async function loadLiveNotifications() {
@@ -176,6 +212,7 @@ export function FinSentinelDashboard({
           `${apiBase}/api/device/notifications`,
           {
             cache: 'no-store',
+            credentials: 'include',
           }
         )
 
@@ -229,18 +266,17 @@ export function FinSentinelDashboard({
       cancelled = true
       window.clearInterval(interval)
     }
-  }, [apiBase])
-
-  // ============================================================
-  // SIMULATION
-  // ============================================================
+  }, [apiBase, authReady])
 
   useEffect(() => {
+    if (!authReady) return
+
     fetch(`${apiBase}/api/simulate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
+      credentials: 'include',
       body: JSON.stringify({
         proposed_amount: 50000,
         proposed_emi: emi,
@@ -252,7 +288,23 @@ export function FinSentinelDashboard({
         }
       })
       .catch(() => undefined)
-  }, [apiBase, emi])
+  }, [apiBase, emi, authReady])
+
+  async function handleSignOut() {
+    await authClient.signOut()
+    router.replace('/sign-in')
+  }
+
+  const initials = useMemo(() => {
+    const parts = userName.trim().split(/\s+/).filter(Boolean)
+
+    if (parts.length === 0) return 'FS'
+    if (parts.length === 1) {
+      return parts[0].slice(0, 2).toUpperCase()
+    }
+
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+  }, [userName])
 
   const graph = useMemo(
     () => reconstructLoanGraph(parsedEvents),
@@ -262,10 +314,6 @@ export function FinSentinelDashboard({
   const total = profileCommitment + emi
   const dti = simulation.projected_dti
   const isRisk = simulation.risk_status === 'AT_RISK'
-
-  // ============================================================
-  // REAL NOTIFICATION DATA FOR UI
-  // ============================================================
 
   const liveNotificationCount = liveNotifications.length
 
@@ -334,18 +382,34 @@ export function FinSentinelDashboard({
     }
   )
 
-  // ============================================================
-  // REFRESH
-  // ============================================================
+  if (!authReady) {
+    return (
+      <main className="auth-page">
+        <section className="auth-card">
+          <div className="brand-mark">FS</div>
+          <p className="eyebrow">FIN SENTINEL</p>
+          <h1>Checking your workspace…</h1>
+          <p className="auth-copy">
+            Verifying your secure session.
+          </p>
+        </section>
+      </main>
+    )
+  }
 
   function refreshData() {
     setSyncing(true)
 
     Promise.all([
-      fetch(`${apiBase}/api/financial/summary`),
-      fetch(`${apiBase}/api/repayments/calendar`),
+      fetch(`${apiBase}/api/financial/summary`, {
+        credentials: 'include',
+      }),
+      fetch(`${apiBase}/api/repayments/calendar`, {
+        credentials: 'include',
+      }),
       fetch(`${apiBase}/api/device/notifications`, {
         cache: 'no-store',
+        credentials: 'include',
       }),
     ])
       .then(
@@ -404,10 +468,6 @@ export function FinSentinelDashboard({
       .finally(() => setSyncing(false))
   }
 
-  // ============================================================
-  // VOICE
-  // ============================================================
-
   function startVoiceInput() {
     type RecognitionEvent = {
       results: ArrayLike<ArrayLike<{ transcript: string }>>
@@ -465,10 +525,6 @@ export function FinSentinelDashboard({
     recognition.start()
   }
 
-  // ============================================================
-  // ASSISTANT
-  // ============================================================
-
   function askQuery() {
     if (!query.trim()) return
 
@@ -502,10 +558,6 @@ export function FinSentinelDashboard({
         )
       )
   }
-
-  // ============================================================
-  // UI
-  // ============================================================
 
   return (
     <main
@@ -601,11 +653,11 @@ export function FinSentinelDashboard({
           </div>
 
           <div className="profile">
-            <div className="avatar">KC</div>
+            <div className="avatar">{initials}</div>
 
             <div>
-              <strong>Kanishka</strong>
-              <small>Personal workspace</small>
+              <strong>{userName}</strong>
+              <small>{userEmail || 'Personal workspace'}</small>
             </div>
 
             <ChevronDown
@@ -670,8 +722,13 @@ export function FinSentinelDashboard({
               </span>
             </button>
 
-            <button className="top-avatar">
-              KC
+            <button
+              className="top-avatar"
+              onClick={handleSignOut}
+              title={`Sign out ${userName}`}
+              aria-label={`Sign out ${userName}`}
+            >
+              {initials}
             </button>
           </div>
         </header>
@@ -707,7 +764,6 @@ export function FinSentinelDashboard({
             </button>
           </div>
 
-          {/* LIVE DEVICE STATUS */}
           <div className="data-banner" role="status">
             <span
               className="green-dot"
@@ -909,8 +965,7 @@ export function FinSentinelDashboard({
               <div className="metric-foot">
                 <span className="positive">
                   <Check size={13} />
-                  Below {profileThreshold}%
-                  threshold
+                  Below {profileThreshold}% threshold
                 </span>
 
                 <span>healthy</span>
@@ -946,9 +1001,7 @@ export function FinSentinelDashboard({
                   <h2>Repayment calendar</h2>
 
                   <p>
-                    Upcoming obligations
-                    reconstructed from your
-                    notifications.
+                    Upcoming obligations reconstructed from your notifications.
                   </p>
                 </div>
 
@@ -992,13 +1045,7 @@ export function FinSentinelDashboard({
                   ).map((day, index) => (
                     <div
                       key={`${day.day}-${index}`}
-                      className={`calendar-day ${day.muted
-                          ? 'muted-day'
-                          : ''
-                        } ${day.amount
-                          ? 'has-payment'
-                          : ''
-                        }`}
+                      className={`calendar-day ${day.muted ? 'muted-day' : ''} ${day.amount ? 'has-payment' : ''}`}
                     >
                       <span>{day.day}</span>
 
@@ -1006,8 +1053,7 @@ export function FinSentinelDashboard({
                         <div
                           className="payment-chip"
                           style={{
-                            borderColor:
-                              day.color,
+                            borderColor: day.color,
                             color: day.color,
                           }}
                         >
@@ -1054,8 +1100,7 @@ export function FinSentinelDashboard({
                   <h2>Cash-flow forecast</h2>
 
                   <p>
-                    Payment concentration
-                    across the month.
+                    Payment concentration across the month.
                   </p>
                 </div>
 
@@ -1073,11 +1118,9 @@ export function FinSentinelDashboard({
 
                 {forecastDetails && (
                   <div className="forecast-details">
-                    Highest concentration:
-                    12–24 Jun
+                    Highest concentration: 12–24 Jun
                     <br />
-                    Recommended buffer:
-                    ₹6,500
+                    Recommended buffer: ₹6,500
                   </div>
                 )}
               </div>
@@ -1099,9 +1142,7 @@ export function FinSentinelDashboard({
                   <span>
                     Moderate
                     <br />
-                    <small>
-                      concentration
-                    </small>
+                    <small>concentration</small>
                   </span>
                 </div>
               </div>
@@ -1113,11 +1154,7 @@ export function FinSentinelDashboard({
                   33, 20, 14, 12, 21, 33,
                 ].map((height, index) => (
                   <div
-                    className={`chart-bar ${index === 11 ||
-                        index === 10
-                        ? 'highlight'
-                        : ''
-                      }`}
+                    className={`chart-bar ${index === 11 || index === 10 ? 'highlight' : ''}`}
                     style={{
                       height: `${height}%`,
                     }}
@@ -1140,14 +1177,11 @@ export function FinSentinelDashboard({
 
                 <div>
                   <strong>
-                    Payments cluster in
-                    12 days
+                    Payments cluster in 12 days
                   </strong>
 
                   <p>
-                    ₹6,500 is due between
-                    12–24 June. Keep a
-                    buffer available.
+                    ₹6,500 is due between 12–24 June. Keep a buffer available.
                   </p>
                 </div>
               </div>
@@ -1159,20 +1193,13 @@ export function FinSentinelDashboard({
               <div className="panel-heading">
                 <div>
                   <div className="panel-kicker">
-                    <SlidersHorizontal
-                      size={14}
-                    />
+                    <SlidersHorizontal size={14} />
                     BEFORE-YOU-BORROW
                   </div>
 
-                  <h2>
-                    Simulate a new loan
-                  </h2>
+                  <h2>Simulate a new loan</h2>
 
-                  <p>
-                    See the impact before
-                    you commit.
-                  </p>
+                  <p>See the impact before you commit.</p>
                 </div>
 
                 <div className="simulate-badge">
@@ -1201,13 +1228,9 @@ export function FinSentinelDashboard({
                 </div>
 
                 <div className="emi-head">
-                  <label>
-                    Estimated monthly EMI
-                  </label>
+                  <label>Estimated monthly EMI</label>
 
-                  <strong>
-                    {formatINR(emi)}
-                  </strong>
+                  <strong>{formatINR(emi)}</strong>
                 </div>
 
                 <input
@@ -1218,11 +1241,7 @@ export function FinSentinelDashboard({
                   step="500"
                   value={emi}
                   onChange={(event) =>
-                    setEmi(
-                      Number(
-                        event.target.value
-                      )
-                    )
+                    setEmi(Number(event.target.value))
                   }
                   aria-label="Estimated monthly EMI"
                 />
@@ -1235,24 +1254,18 @@ export function FinSentinelDashboard({
 
                 <div className="simulation-result">
                   <div>
-                    <span>
-                      PROJECTED COMMITMENT
-                    </span>
+                    <span>PROJECTED COMMITMENT</span>
 
                     <strong>
                       {money(total)}
-                      <small>
-                        / month
-                      </small>
+                      <small>/ month</small>
                     </strong>
                   </div>
 
                   <div className="result-divider" />
 
                   <div>
-                    <span>
-                      PROJECTED DTI
-                    </span>
+                    <span>PROJECTED DTI</span>
 
                     <strong
                       className={
@@ -1266,10 +1279,7 @@ export function FinSentinelDashboard({
                   </div>
 
                   <div
-                    className={`result-status ${isRisk
-                        ? 'danger-status'
-                        : ''
-                      }`}
+                    className={`result-status ${isRisk ? 'danger-status' : ''}`}
                   >
                     <span className="status-dot" />
 
@@ -1283,23 +1293,16 @@ export function FinSentinelDashboard({
                   <div className="warning-card">
                     <div className="warning-top">
                       <div className="warning-symbol">
-                        <AlertTriangle
-                          size={17}
-                        />
+                        <AlertTriangle size={17} />
                       </div>
 
                       <div>
                         <strong>
-                          Potential repayment
-                          stress
+                          Potential repayment stress
                         </strong>
 
                         <p>
-                          Your projected DTI
-                          crosses the
-                          illustrative{' '}
-                          {profileThreshold}%
-                          safety threshold.
+                          Your projected DTI crosses the illustrative {profileThreshold}% safety threshold.
                         </p>
                       </div>
 
@@ -1314,9 +1317,7 @@ export function FinSentinelDashboard({
                         <ChevronDown
                           size={14}
                           className={
-                            showWhy
-                              ? 'rotate'
-                              : ''
+                            showWhy ? 'rotate' : ''
                           }
                         />
                       </button>
@@ -1325,57 +1326,31 @@ export function FinSentinelDashboard({
                     {showWhy && (
                       <div className="why-content">
                         <div className="why-row">
-                          <span>
-                            Monthly income
-                          </span>
+                          <span>Monthly income</span>
 
-                          <b>
-                            {money(
-                              profileIncome
-                            )}
-                          </b>
+                          <b>{money(profileIncome)}</b>
                         </div>
 
                         <div className="why-row">
-                          <span>
-                            Existing
-                            commitments
-                          </span>
+                          <span>Existing commitments</span>
 
-                          <b>
-                            {money(
-                              profileCommitment
-                            )}
-                          </b>
+                          <b>{money(profileCommitment)}</b>
                         </div>
 
                         <div className="why-row">
-                          <span>
-                            Proposed EMI
-                          </span>
+                          <span>Proposed EMI</span>
 
-                          <b>
-                            {money(emi)}
-                          </b>
+                          <b>{money(emi)}</b>
                         </div>
 
                         <div className="why-row">
-                          <span>
-                            Payment cluster
-                          </span>
+                          <span>Payment cluster</span>
 
-                          <b>
-                            12–24 June
-                          </b>
+                          <b>12–24 June</b>
                         </div>
 
                         <p>
-                          Adding this EMI would
-                          leave less room for
-                          essentials during your
-                          peak repayment window.
-                          Review the impact before
-                          proceeding.
+                          Adding this EMI would leave less room for essentials during your peak repayment window. Review the impact before proceeding.
                         </p>
                       </div>
                     )}
@@ -1388,19 +1363,13 @@ export function FinSentinelDashboard({
               <div className="panel-heading">
                 <div>
                   <div className="panel-kicker">
-                    <MessageSquareText
-                      size={14}
-                    />
+                    <MessageSquareText size={14} />
                     FIN SENTINEL ASSIST
                   </div>
 
-                  <h2>
-                    Ask your finances
-                  </h2>
+                  <h2>Ask your finances</h2>
 
-                  <p>
-                    English, Hindi or Marathi.
-                  </p>
+                  <p>English, Hindi or Marathi.</p>
                 </div>
 
                 <div className="assist-online">
@@ -1416,10 +1385,7 @@ export function FinSentinelDashboard({
                   </div>
 
                   <div>
-                    <p>
-                      Ask me about your
-                      repayments, like:
-                    </p>
+                    <p>Ask me about your repayments, like:</p>
 
                     <button
                       onClick={() => {
@@ -1435,9 +1401,7 @@ export function FinSentinelDashboard({
                       className="suggested-query"
                     >
                       “Meri agli EMI kab hai?”
-                      <ArrowUpRight
-                        size={13}
-                      />
+                      <ArrowUpRight size={13} />
                     </button>
                   </div>
                 </div>
@@ -1453,16 +1417,12 @@ export function FinSentinelDashboard({
                 <input
                   value={query}
                   onChange={(event) =>
-                    setQuery(
-                      event.target.value
-                    )
+                    setQuery(event.target.value)
                   }
                   onKeyDown={(event) => {
                     if (
-                      event.key ===
-                      'Enter' &&
-                      !event.nativeEvent
-                        .isComposing &&
+                      event.key === 'Enter' &&
+                      !event.nativeEvent.isComposing &&
                       event.keyCode !== 229
                     ) {
                       askQuery()
@@ -1473,14 +1433,9 @@ export function FinSentinelDashboard({
                 />
 
                 <button
-                  className={`mic-button ${voiceEnabled
-                      ? 'active'
-                      : ''
-                    }`}
+                  className={`mic-button ${voiceEnabled ? 'active' : ''}`}
                   aria-label="Voice input"
-                  onClick={
-                    startVoiceInput
-                  }
+                  onClick={startVoiceInput}
                 >
                   <Mic size={16} />
                 </button>
@@ -1496,8 +1451,7 @@ export function FinSentinelDashboard({
 
               <div className="assistant-note">
                 <ShieldCheck size={12} />
-                Answers are generated from
-                your local repayment graph.
+                Answers are generated from your local repayment graph.
               </div>
             </section>
           </div>
@@ -1505,28 +1459,20 @@ export function FinSentinelDashboard({
           <footer className="page-footer">
             <span>
               <ShieldCheck size={13} />
-              Your financial data stays on
-              this device.
+              Your financial data stays on this device.
             </span>
 
             <span>
-              FIN SENTINEL v0.1 · The Mystic
-              Merge
+              FIN SENTINEL v0.1 · The Mystic Merge
             </span>
           </footer>
         </div>
       </section>
 
-      {/* ======================================================
-          REAL ANDROID NOTIFICATION DRAWER
-          ====================================================== */}
-
       {showNotifications && (
         <div
           className="modal-backdrop"
-          onClick={() =>
-            setShowNotifications(false)
-          }
+          onClick={() => setShowNotifications(false)}
         >
           <div
             className="notifications-drawer"
@@ -1537,29 +1483,20 @@ export function FinSentinelDashboard({
             <div className="drawer-heading">
               <div>
                 <div className="panel-kicker">
-                  <MessageSquareText
-                    size={14}
-                  />
+                  <MessageSquareText size={14} />
                   RECONSTRUCT
                 </div>
 
-                <h2>
-                  Notification inbox
-                </h2>
+                <h2>Notification inbox</h2>
 
-                <p>
-                  {liveNotificationCount}{' '}
-                  live Android signals
-                </p>
+                <p>{liveNotificationCount} live Android signals</p>
               </div>
 
               <button
                 className="close-button"
                 aria-label="Close notifications"
                 onClick={() =>
-                  setShowNotifications(
-                    false
-                  )
+                  setShowNotifications(false)
                 }
               >
                 <X size={18} />
@@ -1570,9 +1507,7 @@ export function FinSentinelDashboard({
               <Network size={16} />
 
               <span>
-                <strong>
-                  {deviceStatus}
-                </strong>
+                <strong>{deviceStatus}</strong>
 
                 {lastDeviceSync && (
                   <>
@@ -1588,13 +1523,11 @@ export function FinSentinelDashboard({
               <Check size={15} />
             </div>
 
-            {displayNotifications.length ===
-              0 ? (
+            {displayNotifications.length === 0 ? (
               <div
                 className="notification-row"
                 style={{
-                  justifyContent:
-                    'center',
+                  justifyContent: 'center',
                   textAlign: 'center',
                   padding: '40px 20px',
                 }}
@@ -1614,8 +1547,7 @@ export function FinSentinelDashboard({
                       marginBottom: '8px',
                     }}
                   >
-                    No EMI notifications
-                    received yet
+                    No EMI notifications received yet
                   </strong>
 
                   <p
@@ -1624,10 +1556,7 @@ export function FinSentinelDashboard({
                       margin: 0,
                     }}
                   >
-                    Send an EMI SMS to the
-                    Android phone while the
-                    notification listener is
-                    enabled.
+                    Send an EMI SMS to the Android phone while the notification listener is enabled.
                   </p>
                 </div>
               </div>
@@ -1645,9 +1574,7 @@ export function FinSentinelDashboard({
 
                       <div className="notification-copy">
                         <div>
-                          <strong>
-                            {item.lender}
-                          </strong>
+                          <strong>{item.lender}</strong>
 
                           <span>
                             {item.received
@@ -1658,20 +1585,14 @@ export function FinSentinelDashboard({
                           </span>
                         </div>
 
-                        <p>
-                          {item.message}
-                        </p>
+                        <p>{item.message}</p>
 
                         <small>
-                          <span>
-                            {item.language}
-                          </span>
+                          <span>{item.language}</span>
 
                           <i />
 
-                          <span>
-                            {item.channel}
-                          </span>
+                          <span>{item.channel}</span>
                         </small>
 
                         {item.originalText &&
@@ -1679,12 +1600,9 @@ export function FinSentinelDashboard({
                           item.message && (
                             <small
                               style={{
-                                display:
-                                  'block',
-                                marginTop:
-                                  '6px',
-                                opacity:
-                                  0.65,
+                                display: 'block',
+                                marginTop: '6px',
+                                opacity: 0.65,
                               }}
                             >
                               {item.originalText}
