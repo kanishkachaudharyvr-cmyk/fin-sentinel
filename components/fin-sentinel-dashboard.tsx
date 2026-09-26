@@ -208,8 +208,8 @@ export function FinSentinelDashboard({
 
         setLastDeviceSync(
           data.lastSynced ||
-            data.last_synced ||
-            new Date().toISOString()
+          data.last_synced ||
+          new Date().toISOString()
         )
       } catch {
         if (cancelled) return
@@ -377,16 +377,16 @@ export function FinSentinelDashboard({
 
             setDeviceStatus(
               deviceData.deviceStatus ||
-                deviceData.device_status ||
-                (records.length > 0
-                  ? 'Android device connected'
-                  : 'Waiting for EMI notifications')
+              deviceData.device_status ||
+              (records.length > 0
+                ? 'Android device connected'
+                : 'Waiting for EMI notifications')
             )
 
             setLastDeviceSync(
               deviceData.lastSynced ||
-                deviceData.last_synced ||
-                new Date().toISOString()
+              deviceData.last_synced ||
+              new Date().toISOString()
             )
           }
 
@@ -416,8 +416,8 @@ export function FinSentinelDashboard({
     type RecognitionLike = {
       lang: string
       onresult:
-        | ((event: RecognitionEvent) => void)
-        | null
+      | ((event: RecognitionEvent) => void)
+      | null
       onerror: (() => void) | null
       start: () => void
     }
@@ -426,18 +426,18 @@ export function FinSentinelDashboard({
       (
         window as Window & {
           SpeechRecognition?:
-            | (new () => RecognitionLike)
-            | undefined
+          | (new () => RecognitionLike)
+          | undefined
           webkitSpeechRecognition?:
-            | (new () => RecognitionLike)
-            | undefined
+          | (new () => RecognitionLike)
+          | undefined
         }
       ).SpeechRecognition ||
       (
         window as Window & {
           webkitSpeechRecognition?:
-            | (new () => RecognitionLike)
-            | undefined
+          | (new () => RecognitionLike)
+          | undefined
         }
       ).webkitSpeechRecognition
 
@@ -509,9 +509,8 @@ export function FinSentinelDashboard({
 
   return (
     <main
-      className={`sentinel-shell ${
-        isDeckTheme ? 'deck-theme' : ''
-      }`}
+      className={`sentinel-shell ${isDeckTheme ? 'deck-theme' : ''
+        }`}
     >
       <aside className="sidebar">
         <div className="brand">
@@ -540,9 +539,8 @@ export function FinSentinelDashboard({
           <div className="nav-label">WORKSPACE</div>
 
           <button
-            className={`nav-item ${
-              activeNav === 'Overview' ? 'active' : ''
-            }`}
+            className={`nav-item ${activeNav === 'Overview' ? 'active' : ''
+              }`}
             onClick={() => setActiveNav('Overview')}
           >
             <LayoutDashboard size={17} />
@@ -550,9 +548,8 @@ export function FinSentinelDashboard({
           </button>
 
           <button
-            className={`nav-item ${
-              activeNav === 'Notifications' ? 'active' : ''
-            }`}
+            className={`nav-item ${activeNav === 'Notifications' ? 'active' : ''
+              }`}
             onClick={() => {
               setActiveNav('Notifications')
               setShowNotifications(true)
@@ -569,11 +566,10 @@ export function FinSentinelDashboard({
           </button>
 
           <button
-            className={`nav-item ${
-              activeNav === 'Repayment graph'
+            className={`nav-item ${activeNav === 'Repayment graph'
                 ? 'active'
                 : ''
-            }`}
+              }`}
             onClick={() =>
               setActiveNav('Repayment graph')
             }
@@ -583,9 +579,8 @@ export function FinSentinelDashboard({
           </button>
 
           <button
-            className={`nav-item ${
-              activeNav === 'Simulator' ? 'active' : ''
-            }`}
+            className={`nav-item ${activeNav === 'Simulator' ? 'active' : ''
+              }`}
             onClick={() => setActiveNav('Simulator')}
           >
             <SlidersHorizontal size={17} />
@@ -891,9 +886,8 @@ export function FinSentinelDashboard({
             </div>
 
             <div
-              className={`metric-card ${
-                isRisk ? 'risk-metric' : ''
-              }`}
+              className={`metric-card ${isRisk ? 'risk-metric' : ''
+                }`}
             >
               <div className="metric-icon amber">
                 <AlertTriangle size={18} />
@@ -998,15 +992,13 @@ export function FinSentinelDashboard({
                   ).map((day, index) => (
                     <div
                       key={`${day.day}-${index}`}
-                      className={`calendar-day ${
-                        day.muted
+                      className={`calendar-day ${day.muted
                           ? 'muted-day'
                           : ''
-                      } ${
-                        day.amount
+                        } ${day.amount
                           ? 'has-payment'
                           : ''
-                      }`}
+                        }`}
                     >
                       <span>{day.day}</span>
 
@@ -1121,12 +1113,11 @@ export function FinSentinelDashboard({
                   33, 20, 14, 12, 21, 33,
                 ].map((height, index) => (
                   <div
-                    className={`chart-bar ${
-                      index === 11 ||
-                      index === 10
+                    className={`chart-bar ${index === 11 ||
+                        index === 10
                         ? 'highlight'
                         : ''
-                    }`}
+                      }`}
                     style={{
                       height: `${height}%`,
                     }}
@@ -1275,11 +1266,10 @@ export function FinSentinelDashboard({
                   </div>
 
                   <div
-                    className={`result-status ${
-                      isRisk
+                    className={`result-status ${isRisk
                         ? 'danger-status'
                         : ''
-                    }`}
+                      }`}
                   >
                     <span className="status-dot" />
 
@@ -1470,7 +1460,7 @@ export function FinSentinelDashboard({
                   onKeyDown={(event) => {
                     if (
                       event.key ===
-                        'Enter' &&
+                      'Enter' &&
                       !event.nativeEvent
                         .isComposing &&
                       event.keyCode !== 229
@@ -1483,11 +1473,10 @@ export function FinSentinelDashboard({
                 />
 
                 <button
-                  className={`mic-button ${
-                    voiceEnabled
+                  className={`mic-button ${voiceEnabled
                       ? 'active'
                       : ''
-                  }`}
+                    }`}
                   aria-label="Voice input"
                   onClick={
                     startVoiceInput
@@ -1600,7 +1589,7 @@ export function FinSentinelDashboard({
             </div>
 
             {displayNotifications.length ===
-            0 ? (
+              0 ? (
               <div
                 className="notification-row"
                 style={{
@@ -1663,8 +1652,8 @@ export function FinSentinelDashboard({
                           <span>
                             {item.received
                               ? new Date(
-                                  item.received
-                                ).toLocaleString()
+                                item.received
+                              ).toLocaleString()
                               : 'Just now'}
                           </span>
                         </div>
@@ -1687,7 +1676,7 @@ export function FinSentinelDashboard({
 
                         {item.originalText &&
                           item.originalText !==
-                            item.message && (
+                          item.message && (
                             <small
                               style={{
                                 display:
