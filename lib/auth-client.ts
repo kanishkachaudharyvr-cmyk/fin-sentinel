@@ -5,101 +5,129 @@ const API_BASE =
 
 export const authClient = {
   async signUp(email: string, password: string, name: string) {
-    const response = await fetch(`${API_BASE}/api/auth/signup`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify({
-        name,
-        email,
-        password,
-        confirm_password: password,
-      }),
-    })
+    try {
+      const response = await fetch(`${API_BASE}/api/auth/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          confirm_password: password,
+        }),
+      })
 
-    const data = await response.json()
+      const data = await response.json()
 
-    if (!response.ok) {
+      if (!response.ok) {
+        return {
+          data: null,
+          error: data?.detail || 'Unable to create your account.',
+        }
+      }
+
+      return {
+        data,
+        error: null,
+      }
+    } catch (error) {
       return {
         data: null,
-        error: data?.detail || 'Unable to create your account.',
+        error: 'Network error. Please check your connection.',
       }
-    }
-
-    return {
-      data,
-      error: null,
     }
   },
 
   async signIn(email: string, password: string) {
-    const response = await fetch(`${API_BASE}/api/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify({
-        email,
-        password,
-      }),
-    })
+    try {
+      const response = await fetch(`${API_BASE}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      })
 
-    const data = await response.json()
+      const data = await response.json()
 
-    if (!response.ok) {
+      if (!response.ok) {
+        return {
+          data: null,
+          error: data?.detail || 'Invalid email or password.',
+        }
+      }
+
+      return {
+        data,
+        error: null,
+      }
+    } catch (error) {
       return {
         data: null,
-        error: data?.detail || 'Invalid email or password.',
+        error: 'Network error. Please check your connection.',
       }
-    }
-
-    return {
-      data,
-      error: null,
     }
   },
 
   async getMe() {
-    const response = await fetch(`${API_BASE}/api/auth/me`, {
-      method: 'GET',
-      credentials: 'include',
-      cache: 'no-store',
-    })
+    try {
+      const response = await fetch(`${API_BASE}/api/auth/me`, {
+        method: 'GET',
+        credentials: 'include',
+        cache: 'no-store',
+      })
 
-    if (!response.ok) {
+      if (!response.ok) {
+        return {
+          data: null,
+          error: 'Not authenticated',
+        }
+      }
+
+      const data = await response.json()
+
+      return {
+        data,
+        error: null,
+      }
+    } catch (error) {
       return {
         data: null,
-        error: 'Not authenticated',
+        error: 'Network error or not authenticated',
       }
-    }
-
-    const data = await response.json()
-
-    return {
-      data,
-      error: null,
     }
   },
 
   async signOut() {
-    const response = await fetch(`${API_BASE}/api/auth/logout`, {
-      method: 'POST',
-      credentials: 'include',
-    })
+    try {
+      const response = await fetch(`${API_BASE}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      })
 
-    if (!response.ok) {
+      if (!response.ok) {
+        return {
+          data: null,
+          error: 'Unable to sign out.',
+        }
+      }
+
+      return {
+        data: await response.json(),
+        error: null,
+      }
+    } catch (error) {
       return {
         data: null,
-        error: 'Unable to sign out.',
+        error: 'Network error while signing out.',
       }
-    }
-
-    return {
-      data: await response.json(),
-      error: null,
     }
   },
 }
