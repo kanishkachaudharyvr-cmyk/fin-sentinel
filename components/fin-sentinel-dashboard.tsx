@@ -110,6 +110,7 @@ export function FinSentinelDashboard({ userName = 'Kanishka' }: { userName?: str
   const total = profileCommitment + emi
   const dti = simulation.projected_dti
   const isRisk = simulation.risk_status === 'AT_RISK'
+  const emiDeviceRecords = deviceRecords.filter((record) => record.isEmi)
 
   function refreshData() {
     setSyncing(true)
@@ -206,11 +207,11 @@ export function FinSentinelDashboard({ userName = 'Kanishka' }: { userName?: str
 
           {activeNav === 'Notifications' && (
             <div className="dashboard-grid">
-              {deviceRecords.length > 0 ? (
+              {emiDeviceRecords.length > 0 ? (
                 <section className="panel device-records-panel">
-                  <div className="panel-heading"><div><div className="panel-kicker"><Cpu size={14} /> LIVE DEVICE DATA</div><h2>Detected EMI records</h2><p>Validated notifications received from your connected Android device.</p></div><span className="device-record-count">{deviceRecords.length} active</span></div>
+                  <div className="panel-heading"><div><div className="panel-kicker"><Cpu size={14} /> LIVE DEVICE DATA</div><h2>Detected EMI records</h2><p>Validated notifications received from your connected Android device.</p></div><span className="device-record-count">{emiDeviceRecords.length} active</span></div>
                   <div className="device-record-grid">
-                    {deviceRecords.map((record) => (
+                    {emiDeviceRecords.map((record) => (
                       <article className="device-record" key={record.id}>
                         <div className="device-record-top"><strong>{record.source}</strong><span>{money(record.amount)}</span></div>
                         <div className="device-record-meta"><span>Due {new Date(`${record.dueDate}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span><span>{record.provenance}</span></div>
