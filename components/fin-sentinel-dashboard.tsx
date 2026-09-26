@@ -132,7 +132,7 @@ export function FinSentinelDashboard({
     let cancelled = false
 
     async function checkAuthentication() {
-      const result = await authClient.getMe()
+      const result = await authClient.getSession()
 
       if (cancelled) return
 
@@ -142,13 +142,11 @@ export function FinSentinelDashboard({
       }
 
       const authenticatedName =
-        result.data.name ||
         result.data.user?.name ||
         initialUserName
 
       setUserName(authenticatedName)
       setUserEmail(
-        result.data.email ||
         result.data.user?.email ||
         ''
       )
