@@ -124,6 +124,54 @@ def infer_lender(sender: str, text: str):
     return sender.split("-")[-1].upper() or "Unknown lender"
 
 
+FINANCIAL_TOKENS = (
+    "emi",
+    "loan",
+    "repay",
+    "repayment",
+    "installment",
+    "instalment",
+    "payment due",
+    "due date",
+    "payment debited",
+    "debited",
+    "credited",
+    "bnpl",
+    "pay later",
+    "credit card",
+    "outstanding",
+    "monthly payment",
+)
+
+PROMO_TOKENS = (
+    "zilo",
+    "nykaa",
+    "sale",
+    "offer",
+    "flat ",
+    "% off",
+    "shop now",
+    "wishlist",
+    "order shipped",
+    "delivered",
+)
+
+
+def is_financial_notification(text: str, source: str = "", package_name: str = "", is_emi: bool = False) -> bool:
+    if is_emi:
+        return True
+    blob = f"{source} {package_name} {text}".lower()
+    if classify(text) != "NON_FINANCIAL":
+        return True
+    if any(token in blob for token in FINANCIAL_TOKENS):
+        return True
+    if any(token in blob for token in ("zilo", "nykaa")) and not any(
+        token in blob for token in FINANCIAL_TOKENS
+    ):
+        return False
+    return False
+
+
 def parse_notification(sender: str, text: str):
     return {
         "sender": sender,

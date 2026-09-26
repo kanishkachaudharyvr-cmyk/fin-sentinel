@@ -14,7 +14,7 @@ export async function getOwnedProfile() {
   const [created] = await db.insert(profiles).values({
     id: userId,
     name: session.user.name || 'Personal workspace',
-    monthlyIncome: 35000,
+    monthlyIncome: 0,
     safetyThreshold: 40,
   }).onConflictDoNothing().returning()
 

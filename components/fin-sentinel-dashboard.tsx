@@ -10,7 +10,6 @@ import {
   ChevronDown,
   ChevronRight,
   CircleHelp,
-  Cpu,
   IndianRupee,
   LayoutDashboard,
   MessageSquareText,
@@ -19,6 +18,7 @@ import {
   Network,
   PanelLeft,
   Search,
+  LogOut,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
@@ -28,114 +28,215 @@ import {
 } from 'lucide-react'
 
 import {
-  existingCommitment,
-  formatCompactINR,
   formatINR,
-  monthlyIncome,
-  notifications,
-  obligations,
-  safetyThreshold,
+  formatCompactINR,
 } from '@/lib/fin-sentinel-data'
+import {
+  apiFetch,
+  authHeaders,
+  clearToken,
+  firstName,
+  getApiBase,
+  initialsFromName,
+  type AuthUser,
+} from '@/lib/session-client'
 
-import { parseNotifications } from '@/lib/parser'
-import { reconstructLoanGraph } from '@/lib/graph_engine'
+type FinancialSummary = {
+  monthly_income: number
+  total_existing_commitments: number
+  current_dti: number
+  risk_status: string
+  dti_threshold: number
+}
 
-const days = [
-  { day: 1, muted: true },
-  { day: 2, muted: true },
-  { day: 3, muted: true },
-  { day: 4, muted: true },
-  { day: 5, amount: 2000, lender: 'Slice', color: '#b48cff' },
-  { day: 6 },
-  { day: 7 },
-  { day: 8 },
-  { day: 9 },
-  { day: 10 },
-  { day: 11 },
-  { day: 12, amount: 1500, lender: 'LazyPay', color: '#44d7a8' },
-  { day: 13 },
-  { day: 14 },
-  { day: 15 },
-  { day: 16 },
-  { day: 17 },
-  { day: 18, amount: 2500, lender: 'Amazon Pay', color: '#7aa7ff' },
-  { day: 19 },
-  { day: 20 },
-  { day: 21 },
-  { day: 22 },
-  { day: 23 },
-  { day: 24, amount: 3000, lender: 'KreditBee', color: '#f4b860' },
-  { day: 25 },
-  { day: 26 },
-  { day: 27 },
-  { day: 28 },
-  { day: 29 },
-  { day: 30, amount: 1500, lender: 'HDFC Bank', color: '#ef8b8b' },
-]
+type Repayment = {
+  id: number
+  amount: number
+  due_date: string
+  status: string
+  lender: string
+  loan_type: string
+}
+
+type DeviceNotification = {
+  id: string
+  source: string
+  amount: number | null
+  dueDate: string
+  notificationText: string
+  detectedAt: string
+  provenance: string
+  isEmi: boolean
+}
+
+type DeviceNotificationsResponse = {
+  records: DeviceNotification[]
+  deviceStatus?: string
+  lastSynced?: string | null
+}
+
+type Simulation = {
+  projected_dti: number
+  threshold_delta: number
+  warning_reasons: string[]
+  risk_status: string
+}
+
+type CalendarCell = {
+  key: string
+  day: number | null
+  repayments: Repayment[]
+}
+
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders(init?.headers),
+    },
+  })
+  if (!response.ok) {
+    throw new Error(`Request failed (${response.status})`)
+  }
+  return response.json() as Promise<T>
+}
+
+function localDate(dateString: string) {
+  const [year, month, day] = dateString.slice(0, 10).split('-').map(Number)
+  if (!year || !month || !day) return null
+  const date = new Date(year, month - 1, day)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function dateKey(dateString: string) {
+  return dateString.slice(0, 10)
+}
+
+function displayDate(dateString: string) {
+  return localDate(dateString)?.toLocaleDateString() || dateString
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Request failed.'
+}
 
 function money(amount: number) {
-  return formatCompactINR(amount).replace('₹', '₹')
+  return formatCompactINR(amount)
 }
 
 export function FinSentinelDashboard({
-  userName = 'Kanishka',
+  user,
 }: {
-  userName?: string
+  user: AuthUser
 }) {
+  const userName = firstName(user.name)
+  const userInitials = initialsFromName(user.name)
+  const [showProfileMenu, setShowProfileMenu] = useState(false)
+  const [confirmClear, setConfirmClear] = useState(false)
+  const [clearing, setClearing] = useState(false)
   const [activeNav, setActiveNav] = useState('Overview')
-  const [emi, setEmi] = useState(4500)
+  const [emi, setEmi] = useState(0)
+  const [proposedAmount, setProposedAmount] = useState('')
   const [showWhy, setShowWhy] = useState(false)
   const [query, setQuery] = useState('')
   const [queryAnswer, setQueryAnswer] = useState('')
   const [showNotifications, setShowNotifications] = useState(false)
   const [isDeckTheme, setIsDeckTheme] = useState(false)
   const [syncing, setSyncing] = useState(false)
-  const [syncMessage, setSyncMessage] = useState('Last synced just now')
+  const [syncMessage, setSyncMessage] = useState('Not synced yet')
   const [voiceEnabled, setVoiceEnabled] = useState(false)
   const [monthOffset, setMonthOffset] = useState(0)
-  const [forecastDetails, setForecastDetails] = useState(false)
-
-  const [summary, setSummary] = useState({
-    monthly_income: monthlyIncome,
-    total_existing_commitments: existingCommitment,
-    current_dti: (existingCommitment / monthlyIncome) * 100,
-    risk_status: 'HEALTHY',
-    dti_threshold: safetyThreshold,
-  })
-
-  const [calendar, setCalendar] = useState<typeof days>(days)
-
-  const [simulation, setSimulation] = useState({
-    projected_dti: ((existingCommitment + emi) / monthlyIncome) * 100,
-    threshold_delta: 0,
-    warning_reasons: [] as string[],
-    risk_status: 'HEALTHY',
-  })
-
+  const [summary, setSummary] = useState<FinancialSummary | null>(null)
+  const [calendar, setCalendar] = useState<Repayment[]>([])
+  const [simulation, setSimulation] = useState<Simulation | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(true)
+  const [calendarLoading, setCalendarLoading] = useState(true)
+  const [simulationLoading, setSimulationLoading] = useState(false)
   const [dataError, setDataError] = useState('')
+  const [simulationError, setSimulationError] = useState('')
+  const [assistantLoading, setAssistantLoading] = useState(false)
+  const [deviceError, setDeviceError] = useState('')
 
   // ============================================================
   // LIVE ANDROID DEVICE DATA
   // ============================================================
 
-  const [liveNotifications, setLiveNotifications] = useState<any[]>([])
+  const [liveNotifications, setLiveNotifications] = useState<DeviceNotification[]>([])
   const [deviceStatus, setDeviceStatus] = useState(
     'Waiting for notification data'
   )
   const [lastDeviceSync, setLastDeviceSync] = useState<string | null>(null)
 
-  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || ''
+  const apiBase = getApiBase()
 
-  const profileIncome = summary.monthly_income || monthlyIncome
-  const profileCommitment =
-    summary.total_existing_commitments || existingCommitment
-  const profileThreshold = summary.dti_threshold || safetyThreshold
+  useEffect(() => {
+    void apiFetch('/api/device/claim', { method: 'POST' }).catch(() => undefined)
+  }, [])
+  const profileIncome = summary?.monthly_income
+  const profileCommitment = summary?.total_existing_commitments
+  const profileThreshold = summary?.dti_threshold
+  const obligationCount = calendar.length
+  const selectedMonth = useMemo(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth() + monthOffset, 1)
+  }, [monthOffset])
+  const monthLabel = selectedMonth.toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric',
+  })
+  const visibleRepayments = useMemo(
+    () =>
+      calendar.filter((repayment) => {
+        const date = localDate(repayment.due_date)
+        return (
+          date !== null &&
+          date.getFullYear() === selectedMonth.getFullYear() &&
+          date.getMonth() === selectedMonth.getMonth()
+        )
+      }),
+    [calendar, selectedMonth]
+  )
+  const calendarCells = useMemo<CalendarCell[]>(() => {
+    const firstWeekday = (selectedMonth.getDay() + 6) % 7
+    const daysInMonth = new Date(
+      selectedMonth.getFullYear(),
+      selectedMonth.getMonth() + 1,
+      0
+    ).getDate()
+    const paymentsByDate = new Map<string, Repayment[]>()
 
-  const obligationCount = calendar.length || obligations.length
+    for (const repayment of visibleRepayments) {
+      const key = dateKey(repayment.due_date)
+      paymentsByDate.set(key, [...(paymentsByDate.get(key) ?? []), repayment])
+    }
 
-  const parsedEvents = useMemo(
-    () => parseNotifications(notifications),
-    []
+    return [
+      ...Array.from({ length: firstWeekday }, (_, index) => ({
+        key: `empty-${index}`,
+        day: null,
+        repayments: [],
+      })),
+      ...Array.from({ length: daysInMonth }, (_, index) => {
+        const day = index + 1
+        const key = `${selectedMonth.getFullYear()}-${String(
+          selectedMonth.getMonth() + 1
+        ).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+        return {
+          key,
+          day,
+          repayments: paymentsByDate.get(key) ?? [],
+        }
+      }),
+    ]
+  }, [selectedMonth, visibleRepayments])
+  const nextRepayment = calendar[0]
+  const nextRepaymentDate = nextRepayment
+    ? localDate(nextRepayment.due_date)
+    : null
+  const monthTotal = visibleRepayments.reduce(
+    (total, repayment) => total + repayment.amount,
+    0
   )
 
   // ============================================================
@@ -143,24 +244,44 @@ export function FinSentinelDashboard({
   // ============================================================
 
   useEffect(() => {
-    Promise.all([
-      fetch(`${apiBase}/api/financial/summary`),
-      fetch(`${apiBase}/api/repayments/calendar`),
-    ])
-      .then(async ([summaryResponse, calendarResponse]) => {
-        if (!summaryResponse.ok || !calendarResponse.ok) {
-          throw new Error('Unable to load financial data')
-        }
+    let cancelled = false
 
-        setSummary(await summaryResponse.json())
-        setCalendar(await calendarResponse.json())
-        setDataError('')
-      })
-      .catch(() =>
-        setDataError(
-          'Live data is unavailable. Showing the last local snapshot.'
-        )
-      )
+    async function loadFinancialData() {
+      if (!apiBase) {
+        setDataError('Set NEXT_PUBLIC_API_BASE_URL to connect to FastAPI.')
+        setSummaryLoading(false)
+        setCalendarLoading(false)
+        return
+      }
+
+      const [summaryResult, calendarResult] = await Promise.allSettled([
+        fetchJson<FinancialSummary>(`${apiBase}/api/financial/summary`),
+        fetchJson<Repayment[]>(`${apiBase}/api/repayments/calendar`),
+      ])
+      if (cancelled) return
+
+      const errors: string[] = []
+      if (summaryResult.status === 'fulfilled') {
+        setSummary(summaryResult.value)
+      } else {
+        errors.push(`Financial summary unavailable: ${errorMessage(summaryResult.reason)}`)
+      }
+      if (calendarResult.status === 'fulfilled') {
+        setCalendar(calendarResult.value)
+      } else {
+        errors.push(`Repayment calendar unavailable: ${errorMessage(calendarResult.reason)}`)
+      }
+      setDataError(errors.join(' '))
+      setSummaryLoading(false)
+      setCalendarLoading(false)
+    }
+
+    void loadFinancialData()
+    const interval = window.setInterval(loadFinancialData, 5000)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
   }, [apiBase])
 
   // ============================================================
@@ -172,49 +293,37 @@ export function FinSentinelDashboard({
 
     async function loadLiveNotifications() {
       try {
-        const response = await fetch(
-          `${apiBase}/api/device/notifications`,
-          {
-            cache: 'no-store',
-          }
-        )
-
-        if (!response.ok) {
-          throw new Error('Unable to load device notifications')
+        if (!apiBase) {
+          throw new Error('Set NEXT_PUBLIC_API_BASE_URL to connect to FastAPI.')
         }
-
-        const data = await response.json()
+        const data = await fetchJson<DeviceNotificationsResponse>(
+          `${apiBase}/api/device/notifications`,
+          { cache: 'no-store' }
+        )
 
         if (cancelled) return
 
-        const records = Array.isArray(data)
-          ? data
-          : Array.isArray(data.records)
-            ? data.records
-            : Array.isArray(data.notifications)
-              ? data.notifications
-              : []
-
-        setLiveNotifications(records)
+        setLiveNotifications(data.records ?? [])
 
         const status =
           data.deviceStatus ||
-          data.device_status ||
-          (records.length > 0
+          (data.records.length > 0
             ? 'Android device connected'
             : 'Waiting for EMI notifications')
 
         setDeviceStatus(status)
+        setDeviceError('')
 
-        setLastDeviceSync(
-          data.lastSynced ||
-            data.last_synced ||
-            new Date().toISOString()
-        )
-      } catch {
+        setLastDeviceSync(data.lastSynced ?? null)
+      } catch (error) {
         if (cancelled) return
 
         setDeviceStatus('Device connection unavailable')
+        setDeviceError(
+          error instanceof Error
+            ? `Unable to load live device notifications: ${error.message}`
+            : 'Unable to load live device notifications.'
+        )
       }
     }
 
@@ -236,32 +345,51 @@ export function FinSentinelDashboard({
   // ============================================================
 
   useEffect(() => {
-    fetch(`${apiBase}/api/simulate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        proposed_amount: 50000,
-        proposed_emi: emi,
-      }),
-    })
-      .then(async (response) => {
-        if (response.ok) {
-          setSimulation(await response.json())
+    let cancelled = false
+
+    async function runSimulation() {
+      if (!apiBase) {
+        setSimulationError('Set NEXT_PUBLIC_API_BASE_URL to connect to FastAPI.')
+        return
+      }
+
+      setSimulationLoading(true)
+      setSimulationError('')
+      try {
+        const result = await fetchJson<Simulation>(
+          `${apiBase}/api/simulate`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              proposed_amount: Number(proposedAmount.replace(/,/g, '')) || 0,
+              proposed_emi: emi,
+            }),
+          }
+        )
+        if (!cancelled) setSimulation(result)
+      } catch (error) {
+        if (!cancelled) {
+          setSimulation(null)
+          setSimulationError(
+            error instanceof Error
+              ? `Simulation unavailable: ${error.message}`
+              : 'Simulation unavailable.'
+          )
         }
-      })
-      .catch(() => undefined)
-  }, [apiBase, emi])
+      } finally {
+        if (!cancelled) setSimulationLoading(false)
+      }
+    }
 
-  const graph = useMemo(
-    () => reconstructLoanGraph(parsedEvents),
-    [parsedEvents]
-  )
+    void runSimulation()
+    return () => {
+      cancelled = true
+    }
+  }, [apiBase, emi, proposedAmount])
 
-  const total = profileCommitment + emi
-  const dti = simulation.projected_dti
-  const isRisk = simulation.risk_status === 'AT_RISK'
+  const dti = simulation?.projected_dti
+  const isRisk = simulation?.risk_status === 'AT_RISK'
 
   // ============================================================
   // REAL NOTIFICATION DATA FOR UI
@@ -271,65 +399,24 @@ export function FinSentinelDashboard({
 
   const displayNotifications = liveNotifications.map(
     (item, index) => {
-      const amount =
-        item.amount ??
-        item.parsed?.amount ??
-        null
-
-      const dueDate =
-        item.dueDate ??
-        item.due_date ??
-        item.parsed?.due_date ??
-        ''
-
-      const text =
-        item.text ??
-        item.message ??
-        item.parsed?.text ??
-        'EMI notification received'
-
-      const lender =
-        item.title ??
-        item.sender ??
-        item.lender ??
-        item.parsed?.lender_name ??
-        'SMS notification'
-
-      const received =
-        item.detectedAt ??
-        item.detected_at ??
-        item.createdAt ??
-        item.created_at ??
-        ''
-
+      const amount = item.amount
+      const dueDate = item.dueDate
+      const text = item.notificationText || 'Notification received'
+      const source = item.source || 'Android notification'
+      const received = item.detectedAt
       return {
-        id:
-          item.id ??
-          `${received}-${index}`,
-
-        lender,
-
+        id: item.id || `${received}-${index}`,
+        source,
         received,
-
         message:
-          amount !== null
-            ? `EMI amount: ₹${Number(amount).toLocaleString('en-IN')}${dueDate ? ` · Due: ${dueDate}` : ''}`
+          item.isEmi && amount !== null && amount > 0
+            ? `EMI amount: ₹${Number(amount).toLocaleString('en-IN')}${dueDate ? ` · Due: ${displayDate(dueDate)}` : ''}`
             : text,
-
         originalText: text,
-
-        language:
-          item.language ??
-          item.parsed?.language ??
-          'English',
-
-        channel:
-          item.source ??
-          item.packageName ??
-          'SMS',
-
+        channel: item.provenance || 'Android notification',
         amount,
         dueDate,
+        isEmi: item.isEmi,
       }
     }
   )
@@ -338,70 +425,82 @@ export function FinSentinelDashboard({
   // REFRESH
   // ============================================================
 
-  function refreshData() {
+  async function refreshData() {
     setSyncing(true)
+    if (!apiBase) {
+      setDataError('Set NEXT_PUBLIC_API_BASE_URL to connect to FastAPI.')
+      setSyncMessage('Sync unavailable')
+      setSyncing(false)
+      return
+    }
 
-    Promise.all([
-      fetch(`${apiBase}/api/financial/summary`),
-      fetch(`${apiBase}/api/repayments/calendar`),
-      fetch(`${apiBase}/api/device/notifications`, {
-        cache: 'no-store',
-      }),
-    ])
-      .then(
-        async ([
-          summaryResponse,
-          calendarResponse,
-          deviceResponse,
-        ]) => {
-          if (summaryResponse.ok) {
-            setSummary(await summaryResponse.json())
-          }
+    const [summaryResult, calendarResult, deviceResult] =
+      await Promise.allSettled([
+        fetchJson<FinancialSummary>(`${apiBase}/api/financial/summary`),
+        fetchJson<Repayment[]>(`${apiBase}/api/repayments/calendar`),
+        fetchJson<DeviceNotificationsResponse>(
+          `${apiBase}/api/device/notifications`,
+          { cache: 'no-store' }
+        ),
+      ])
+    const errors: string[] = []
 
-          if (calendarResponse.ok) {
-            setCalendar(await calendarResponse.json())
-          }
+    if (summaryResult.status === 'fulfilled') {
+      setSummary(summaryResult.value)
+      setSummaryLoading(false)
+    } else {
+      errors.push(`Financial summary unavailable: ${errorMessage(summaryResult.reason)}`)
+    }
 
-          if (deviceResponse.ok) {
-            const deviceData = await deviceResponse.json()
+    if (calendarResult.status === 'fulfilled') {
+      setCalendar(calendarResult.value)
+      setCalendarLoading(false)
+    } else {
+      errors.push(`Repayment calendar unavailable: ${errorMessage(calendarResult.reason)}`)
+    }
 
-            const records = Array.isArray(deviceData)
-              ? deviceData
-              : Array.isArray(deviceData.records)
-                ? deviceData.records
-                : Array.isArray(deviceData.notifications)
-                  ? deviceData.notifications
-                  : []
-
-            setLiveNotifications(records)
-
-            setDeviceStatus(
-              deviceData.deviceStatus ||
-                deviceData.device_status ||
-                (records.length > 0
-                  ? 'Android device connected'
-                  : 'Waiting for EMI notifications')
-            )
-
-            setLastDeviceSync(
-              deviceData.lastSynced ||
-                deviceData.last_synced ||
-                new Date().toISOString()
-            )
-          }
-
-          if (!summaryResponse.ok || !calendarResponse.ok) {
-            throw new Error('Sync failed')
-          }
-
-          setDataError('')
-          setSyncMessage('Synced just now')
-        }
+    if (deviceResult.status === 'fulfilled') {
+      setLiveNotifications(deviceResult.value.records ?? [])
+      setDeviceStatus(
+        deviceResult.value.deviceStatus ||
+          (deviceResult.value.records.length
+            ? 'Android device connected'
+            : 'Waiting for EMI notifications')
       )
-      .catch(() => {
-        setSyncMessage('Using local snapshot')
-      })
-      .finally(() => setSyncing(false))
+      setLastDeviceSync(deviceResult.value.lastSynced ?? null)
+      setDeviceError('')
+    } else {
+      setDeviceError(
+        `Unable to load live device notifications: ${errorMessage(deviceResult.reason)}`
+      )
+    }
+
+    setDataError(errors.join(' '))
+    setSyncMessage(errors.length ? 'Sync incomplete' : 'Synced just now')
+    setSyncing(false)
+  }
+
+  async function logout() {
+    try {
+      await apiFetch('/api/auth/logout', { method: 'POST' })
+    } catch {
+      // Token is cleared locally even if the backend is unreachable.
+    }
+    clearToken()
+    window.location.href = '/sign-in'
+  }
+
+  async function clearNotifications() {
+    setClearing(true)
+    try {
+      await apiFetch('/api/device/notifications/clear', { method: 'POST' })
+      setLiveNotifications([])
+      setConfirmClear(false)
+    } catch (error) {
+      setDeviceError(`Unable to clear notifications: ${errorMessage(error)}`)
+    } finally {
+      setClearing(false)
+    }
   }
 
   // ============================================================
@@ -469,38 +568,35 @@ export function FinSentinelDashboard({
   // ASSISTANT
   // ============================================================
 
-  function askQuery() {
-    if (!query.trim()) return
+  async function askQuery(question = query) {
+    if (!question.trim()) return
+    if (!apiBase) {
+      setQueryAnswer('Set NEXT_PUBLIC_API_BASE_URL to connect to FastAPI.')
+      return
+    }
 
-    fetch(`${apiBase}/api/query/assistant`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        query,
-      }),
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error('assistant unavailable')
+    setAssistantLoading(true)
+    try {
+      const result = await fetchJson<{ answer: string }>(
+        `${apiBase}/api/query/assistant`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: question }),
         }
-
-        const answer = (await response.json()).answer
-
-        setQueryAnswer(answer)
-
-        if ('speechSynthesis' in window) {
-          window.speechSynthesis.speak(
-            new SpeechSynthesisUtterance(answer)
-          )
-        }
-      })
-      .catch(() =>
-        setQueryAnswer(
-          'The local FIN SENTINEL backend is unavailable right now.'
-        )
       )
+      setQueryAnswer(result.answer)
+
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.speak(
+          new SpeechSynthesisUtterance(result.answer)
+        )
+      }
+    } catch (error) {
+      setQueryAnswer(`Assistant unavailable: ${errorMessage(error)}`)
+    } finally {
+      setAssistantLoading(false)
+    }
   }
 
   // ============================================================
@@ -606,17 +702,35 @@ export function FinSentinelDashboard({
           </div>
 
           <div className="profile">
-            <div className="avatar">KC</div>
+            <button
+              className="profile-trigger"
+              onClick={() => setShowProfileMenu((open) => !open)}
+              aria-expanded={showProfileMenu}
+            >
+              <div className="avatar">{userInitials}</div>
 
-            <div>
-              <strong>Kanishka</strong>
-              <small>Personal workspace</small>
-            </div>
+              <div>
+                <strong>{user.name}</strong>
+                <small>{user.email}</small>
+              </div>
 
-            <ChevronDown
-              size={15}
-              className="muted-icon"
-            />
+              <ChevronDown
+                size={15}
+                className="muted-icon"
+              />
+            </button>
+            {showProfileMenu && (
+              <div className="profile-menu">
+                <div className="profile-menu-meta">
+                  <strong>{user.name}</strong>
+                  <small>{user.email}</small>
+                </div>
+                <button type="button" onClick={logout}>
+                  <LogOut size={14} />
+                  Logout
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </aside>
@@ -675,8 +789,8 @@ export function FinSentinelDashboard({
               </span>
             </button>
 
-            <button className="top-avatar">
-              KC
+            <button className="top-avatar" onClick={() => setShowProfileMenu((open) => !open)}>
+              {userInitials}
             </button>
           </div>
         </header>
@@ -695,7 +809,7 @@ export function FinSentinelDashboard({
 
               <p>
                 Here&apos;s your complete repayment
-                picture for June 2026.
+                picture for {monthLabel}.
               </p>
             </div>
 
@@ -724,6 +838,7 @@ export function FinSentinelDashboard({
 
             <strong>Android:</strong>{' '}
             {deviceStatus}
+            {deviceError && <span> · {deviceError}</span>}
 
             {lastDeviceSync && (
               <span
@@ -771,7 +886,7 @@ export function FinSentinelDashboard({
               <strong>FORECAST</strong>
 
               <small>
-                {obligationCount} obligations linked
+                {obligationCount} repayments linked
               </small>
             </button>
 
@@ -852,17 +967,21 @@ export function FinSentinelDashboard({
               </div>
 
               <div className="metric-value">
-                {money(profileCommitment)}
-                <span>/ month</span>
+                {summaryLoading
+                  ? 'Loading…'
+                  : profileCommitment === undefined
+                    ? 'Unavailable'
+                    : money(profileCommitment)}
+                {profileCommitment !== undefined && <span>/ month</span>}
               </div>
 
               <div className="metric-foot">
                 <span className="positive">
                   <ArrowUpRight size={13} />
-                  5 obligations
+                  {obligationCount} repayments
                 </span>
 
-                <span>deduplicated</span>
+                <span>from live calendar</span>
               </div>
             </div>
 
@@ -876,23 +995,27 @@ export function FinSentinelDashboard({
               </div>
 
               <div className="metric-value">
-                {money(profileIncome)}
-                <span>net income</span>
+                {summaryLoading
+                  ? 'Loading…'
+                  : profileIncome === undefined
+                    ? 'Unavailable'
+                    : money(profileIncome)}
+                {profileIncome !== undefined && <span>net income</span>}
               </div>
 
               <div className="metric-foot">
                 <span className="neutral">
                   <Check size={13} />
-                  User-provided
+                  From financial summary
                 </span>
 
-                <span>June 2026</span>
+                <span>{monthLabel}</span>
               </div>
             </div>
 
             <div
               className={`metric-card ${
-                isRisk ? 'risk-metric' : ''
+                summary?.risk_status === 'AT_RISK' ? 'risk-metric' : ''
               }`}
             >
               <div className="metric-icon amber">
@@ -904,22 +1027,28 @@ export function FinSentinelDashboard({
               </div>
 
               <div className="metric-value">
-                {(
-                  (profileCommitment /
-                    profileIncome) *
-                  100
-                ).toFixed(1)}
-                <span>%</span>
+                {summaryLoading
+                  ? 'Loading…'
+                  : summary?.current_dti === undefined
+                    ? 'Unavailable'
+                    : `${summary.current_dti.toFixed(1)}%`}
               </div>
 
               <div className="metric-foot">
                 <span className="positive">
-                  <Check size={13} />
-                  Below {profileThreshold}%
-                  threshold
+                  {summary?.risk_status === 'AT_RISK' ? (
+                    <AlertTriangle size={13} />
+                  ) : (
+                    <Check size={13} />
+                  )}
+                  {summaryLoading
+                    ? 'Loading risk status'
+                    : summary
+                      ? `${summary.risk_status.replace(/_/g, ' ')} · ${profileThreshold}% threshold`
+                      : 'Risk status unavailable'}
                 </span>
 
-                <span>healthy</span>
+                <span>backend result</span>
               </div>
             </div>
 
@@ -933,14 +1062,30 @@ export function FinSentinelDashboard({
               </div>
 
               <div className="metric-value">
-                ₹1,500
-                <span>in 12 days</span>
+                {summaryLoading || calendarLoading
+                  ? 'Loading…'
+                  : nextRepayment
+                    ? money(nextRepayment.amount)
+                    : 'No upcoming payment'}
+                {nextRepayment && <span>next payment</span>}
               </div>
 
               <div className="metric-foot">
-                <span className="lender-dot" />
-                LazyPay BNPL
-                <span>12 Jun</span>
+                {nextRepayment ? (
+                  <>
+                    <span className="lender-dot" />
+                    {nextRepayment.lender}
+                    <span>
+                      {nextRepaymentDate?.toLocaleDateString()}
+                    </span>
+                  </>
+                ) : (
+                  <span>
+                    {calendarLoading
+                      ? 'Loading repayment data'
+                      : 'No upcoming payment'}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -952,9 +1097,7 @@ export function FinSentinelDashboard({
                   <h2>Repayment calendar</h2>
 
                   <p>
-                    Upcoming obligations
-                    reconstructed from your
-                    notifications.
+                    Repayment cycles returned by FastAPI.
                   </p>
                 </div>
 
@@ -966,9 +1109,7 @@ export function FinSentinelDashboard({
                     )
                   }
                 >
-                  {monthOffset === 0
-                    ? 'June 2026'
-                    : 'July 2026'}
+                  {monthLabel}
 
                   <ChevronDown size={14} />
                 </button>
@@ -992,46 +1133,45 @@ export function FinSentinelDashboard({
                 </div>
 
                 <div className="calendar-grid">
-                  {(monthOffset === 0
-                    ? calendar
-                    : []
-                  ).map((day, index) => (
+                  {calendarCells.map((cell) => (
                     <div
-                      key={`${day.day}-${index}`}
+                      key={cell.key}
                       className={`calendar-day ${
-                        day.muted
-                          ? 'muted-day'
-                          : ''
-                      } ${
-                        day.amount
-                          ? 'has-payment'
-                          : ''
-                      }`}
+                        cell.day === null ? 'muted-day' : ''
+                      } ${cell.repayments.length ? 'has-payment' : ''}`}
                     >
-                      <span>{day.day}</span>
-
-                      {day.amount && (
-                        <div
-                          className="payment-chip"
-                          style={{
-                            borderColor:
-                              day.color,
-                            color: day.color,
-                          }}
-                        >
-                          <b>
-                            {money(day.amount)}
-                          </b>
-
-                          <small>
-                            {day.lender}
-                          </small>
-                        </div>
-                      )}
+                      {cell.day !== null && <span>{cell.day}</span>}
+                      {cell.repayments.map((repayment) => {
+                        const isPaid = repayment.status.toUpperCase() === 'PAID'
+                        return (
+                          <div
+                            className="payment-chip"
+                            key={repayment.id}
+                            style={{
+                              borderColor: isPaid ? '#b48cff' : '#44d7a8',
+                              color: isPaid ? '#b48cff' : '#44d7a8',
+                            }}
+                            title={`${repayment.lender}: ${repayment.status}`}
+                          >
+                            <b>{money(repayment.amount)}</b>
+                            <small>{repayment.lender}</small>
+                          </div>
+                        )
+                      })}
                     </div>
                   ))}
                 </div>
               </div>
+
+              {calendarLoading ? (
+                <p role="status">Loading repayment calendar…</p>
+              ) : dataError.includes('Repayment calendar unavailable') ? (
+                <p role="alert">Repayment calendar could not be loaded.</p>
+              ) : calendar.length === 0 ? (
+                <p className="empty-copy">No repayments yet</p>
+              ) : visibleRepayments.length === 0 ? (
+                <p>No repayment cycles in {monthLabel}.</p>
+              ) : null}
 
               <div className="calendar-legend">
                 <span>
@@ -1040,18 +1180,12 @@ export function FinSentinelDashboard({
                 </span>
 
                 <span>
-                  <i className="legend-dot purple-dot" />
-                  Paid
-                </span>
-
-                <span>
                   <i className="legend-dot gray-dot" />
                   No payment
                 </span>
 
                 <span className="legend-note">
-                  <Cpu size={13} />
-                  Parsed locally
+                  FastAPI · SQLite
                 </span>
               </div>
             </section>
@@ -1067,96 +1201,96 @@ export function FinSentinelDashboard({
                   </p>
                 </div>
 
-                <button
-                  className="more-button"
-                  aria-label="More options"
-                  onClick={() =>
-                    setForecastDetails(
-                      (value) => !value
-                    )
-                  }
-                >
-                  •••
-                </button>
-
-                {forecastDetails && (
-                  <div className="forecast-details">
-                    Highest concentration:
-                    12–24 Jun
-                    <br />
-                    Recommended buffer:
-                    ₹6,500
-                  </div>
-                )}
               </div>
 
               <div className="forecast-summary">
                 <div>
                   <span className="metric-label">
-                    PEAK WINDOW
+                    REPAYMENTS THIS MONTH
                   </span>
 
                   <strong>
-                    12 — 24 Jun
+                    {calendarLoading
+                      ? 'Loading…'
+                      : `${visibleRepayments.length} · ${money(monthTotal)}`}
                   </strong>
                 </div>
 
                 <div className="forecast-risk">
-                  <AlertTriangle size={15} />
+                  <CalendarDays size={15} />
 
                   <span>
-                    Moderate
+                    {visibleRepayments.length}
                     <br />
                     <small>
-                      concentration
+                      scheduled
                     </small>
                   </span>
                 </div>
               </div>
 
-              <div className="bar-chart">
-                {[
-                  22, 17, 13, 8, 12, 36,
-                  28, 19, 10, 14, 45, 57,
-                  33, 20, 14, 12, 21, 33,
-                ].map((height, index) => (
-                  <div
-                    className={`chart-bar ${
-                      index === 11 ||
-                      index === 10
-                        ? 'highlight'
-                        : ''
-                    }`}
-                    style={{
-                      height: `${height}%`,
-                    }}
-                    key={index}
-                  />
-                ))}
-              </div>
+              {visibleRepayments.length > 0 && (
+                <div className="bar-chart" aria-label="Repayment amounts by date">
+                  {calendarCells
+                    .filter((cell) => cell.day !== null)
+                    .map((cell) => {
+                      const amount = cell.repayments.reduce(
+                        (sum, repayment) => sum + repayment.amount,
+                        0
+                      )
+                      const maxAmount = Math.max(
+                        ...calendarCells.map((dayCell) =>
+                          dayCell.repayments.reduce(
+                            (sum, repayment) => sum + repayment.amount,
+                            0
+                          )
+                        ),
+                        1
+                      )
+                      return (
+                        <div
+                          className={`chart-bar ${amount ? 'highlight' : ''}`}
+                          style={{
+                            height: `${amount ? Math.max(12, (amount / maxAmount) * 100) : 4}%`,
+                          }}
+                          key={cell.key}
+                          title={`${cell.day}: ${money(amount)}`}
+                        />
+                      )
+                    })}
+                </div>
+              )}
 
               <div className="chart-axis">
-                <span>1 Jun</span>
-                <span>12 Jun</span>
-                <span>24 Jun</span>
-                <span>30 Jun</span>
+                <span>1 {selectedMonth.toLocaleDateString(undefined, { month: 'short' })}</span>
+                <span>{Math.ceil(new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0).getDate() / 2)} {selectedMonth.toLocaleDateString(undefined, { month: 'short' })}</span>
+                <span>{new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0).getDate()} {selectedMonth.toLocaleDateString(undefined, { month: 'short' })}</span>
               </div>
 
               <div className="forecast-callout">
                 <div className="callout-icon">
-                  <AlertTriangle size={15} />
+                  <CalendarDays size={15} />
                 </div>
 
                 <div>
                   <strong>
-                    Payments cluster in
-                    12 days
+                    {calendarLoading
+                      ? 'Loading repayment forecast'
+                      : visibleRepayments.length
+                        ? `${visibleRepayments.length} repayment${visibleRepayments.length === 1 ? '' : 's'} scheduled`
+                        : dataError.includes('Repayment calendar unavailable')
+                          ? 'Repayment data unavailable'
+                        : calendar.length === 0
+                          ? 'No repayment activity yet'
+                          : 'No repayments scheduled'}
                   </strong>
 
                   <p>
-                    ₹6,500 is due between
-                    12–24 June. Keep a
-                    buffer available.
+                    {visibleRepayments.length
+                      ? `${money(monthTotal)} scheduled in ${monthLabel}.`
+                      : calendar.length === 0
+                        ? 'Live EMI SMS will appear here once reconstructed.'
+                        : 'This view uses repayment cycles returned by the backend.'}
                   </p>
                 </div>
               </div>
@@ -1204,7 +1338,11 @@ export function FinSentinelDashboard({
 
                     <input
                       aria-label="Proposed loan amount"
-                      defaultValue="50,000"
+                      type="number"
+                      min="0"
+                      value={proposedAmount}
+                      onChange={(event) => setProposedAmount(event.target.value)}
+                      placeholder="Enter amount"
                     />
                   </div>
                 </div>
@@ -1245,14 +1383,11 @@ export function FinSentinelDashboard({
                 <div className="simulation-result">
                   <div>
                     <span>
-                      PROJECTED COMMITMENT
+                      COMMITMENT TOTAL
                     </span>
 
                     <strong>
-                      {money(total)}
-                      <small>
-                        / month
-                      </small>
+                      Not provided by API
                     </strong>
                   </div>
 
@@ -1270,7 +1405,11 @@ export function FinSentinelDashboard({
                           : 'teal-text'
                       }
                     >
-                      {dti.toFixed(1)}%
+                      {simulationLoading
+                        ? 'Calculating…'
+                        : dti === undefined
+                          ? 'Unavailable'
+                          : `${dti.toFixed(1)}%`}
                     </strong>
                   </div>
 
@@ -1283,13 +1422,21 @@ export function FinSentinelDashboard({
                   >
                     <span className="status-dot" />
 
-                    {isRisk
-                      ? 'Needs attention'
-                      : 'Within threshold'}
+                    {simulationLoading
+                      ? 'Simulation loading'
+                      : isRisk === undefined
+                        ? 'Simulation unavailable'
+                        : isRisk
+                          ? 'Needs attention'
+                          : 'Within threshold'}
                   </div>
                 </div>
 
-                {isRisk && (
+                {simulationError && (
+                  <p role="alert">{simulationError}</p>
+                )}
+
+                {isRisk && simulation && (
                   <div className="warning-card">
                     <div className="warning-top">
                       <div className="warning-symbol">
@@ -1305,11 +1452,8 @@ export function FinSentinelDashboard({
                         </strong>
 
                         <p>
-                          Your projected DTI
-                          crosses the
-                          illustrative{' '}
-                          {profileThreshold}%
-                          safety threshold.
+                          {simulation.warning_reasons.join(' ') ||
+                            `Projected DTI is above the ${profileThreshold ?? 'configured'}% threshold.`}
                         </p>
                       </div>
 
@@ -1340,9 +1484,9 @@ export function FinSentinelDashboard({
                           </span>
 
                           <b>
-                            {money(
-                              profileIncome
-                            )}
+                            {profileIncome === undefined
+                              ? 'Unavailable'
+                              : money(profileIncome)}
                           </b>
                         </div>
 
@@ -1353,9 +1497,9 @@ export function FinSentinelDashboard({
                           </span>
 
                           <b>
-                            {money(
-                              profileCommitment
-                            )}
+                            {profileCommitment === undefined
+                              ? 'Unavailable'
+                              : money(profileCommitment)}
                           </b>
                         </div>
 
@@ -1375,7 +1519,9 @@ export function FinSentinelDashboard({
                           </span>
 
                           <b>
-                            12–24 June
+                            {simulation.warning_reasons.length
+                              ? simulation.warning_reasons.join(' ')
+                              : 'No additional warning factors.'}
                           </b>
                         </div>
 
@@ -1413,9 +1559,9 @@ export function FinSentinelDashboard({
                   </p>
                 </div>
 
-                <div className="assist-online">
+                <div className="assist-online" role="status">
                   <span className="green-dot" />
-                  Ready
+                  {assistantLoading ? 'Thinking…' : 'Assistant'}
                 </div>
               </div>
 
@@ -1432,16 +1578,11 @@ export function FinSentinelDashboard({
                     </p>
 
                     <button
-                      onClick={() => {
-                        setQuery(
-                          'Meri agli EMI kab hai?'
-                        )
-
-                        setTimeout(
-                          askQuery,
-                          0
-                        )
-                      }}
+                    onClick={() => {
+                      const question = 'Meri agli EMI kab hai?'
+                      setQuery(question)
+                      void askQuery(question)
+                    }}
                       className="suggested-query"
                     >
                       “Meri agli EMI kab hai?”
@@ -1499,7 +1640,7 @@ export function FinSentinelDashboard({
                 <button
                   className="send-button"
                   aria-label="Send question"
-                  onClick={askQuery}
+                  onClick={() => void askQuery()}
                 >
                   <ArrowUpRight size={17} />
                 </button>
@@ -1508,7 +1649,7 @@ export function FinSentinelDashboard({
               <div className="assistant-note">
                 <ShieldCheck size={12} />
                 Answers are generated from
-                your local repayment graph.
+                backend repayment data.
               </div>
             </section>
           </div>
@@ -1560,21 +1701,31 @@ export function FinSentinelDashboard({
 
                 <p>
                   {liveNotificationCount}{' '}
-                  live Android signals
+                  financial signals
                 </p>
               </div>
 
-              <button
-                className="close-button"
-                aria-label="Close notifications"
-                onClick={() =>
-                  setShowNotifications(
-                    false
-                  )
-                }
-              >
-                <X size={18} />
-              </button>
+              <div className="drawer-actions">
+                <button
+                  className="clear-notifications"
+                  type="button"
+                  onClick={() => setConfirmClear(true)}
+                  disabled={liveNotificationCount === 0}
+                >
+                  Clear notifications
+                </button>
+                <button
+                  className="close-button"
+                  aria-label="Close notifications"
+                  onClick={() =>
+                    setShowNotifications(
+                      false
+                    )
+                  }
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             <div className="node-summary">
@@ -1596,7 +1747,11 @@ export function FinSentinelDashboard({
                 )}
               </span>
 
-              <Check size={15} />
+              {deviceError ? (
+                <AlertTriangle size={15} />
+              ) : (
+                <Check size={15} />
+              )}
             </div>
 
             {displayNotifications.length ===
@@ -1625,8 +1780,9 @@ export function FinSentinelDashboard({
                       marginBottom: '8px',
                     }}
                   >
-                    No EMI notifications
-                    received yet
+                    {deviceError
+                      ? 'Notifications unavailable'
+                      : 'No financial notifications yet'}
                   </strong>
 
                   <p
@@ -1635,10 +1791,8 @@ export function FinSentinelDashboard({
                       margin: 0,
                     }}
                   >
-                    Send an EMI SMS to the
-                    Android phone while the
-                    notification listener is
-                    enabled.
+                    {deviceError ||
+                      'Shopping apps and promotions stay out of this inbox. EMI and loan alerts appear here.'}
                   </p>
                 </div>
               </div>
@@ -1657,7 +1811,7 @@ export function FinSentinelDashboard({
                       <div className="notification-copy">
                         <div>
                           <strong>
-                            {item.lender}
+                            {item.source}
                           </strong>
 
                           <span>
@@ -1665,7 +1819,7 @@ export function FinSentinelDashboard({
                               ? new Date(
                                   item.received
                                 ).toLocaleString()
-                              : 'Just now'}
+                                      : 'Time unavailable'}
                           </span>
                         </div>
 
@@ -1675,7 +1829,7 @@ export function FinSentinelDashboard({
 
                         <small>
                           <span>
-                            {item.language}
+                            {item.isEmi ? 'EMI signal' : 'Other notification'}
                           </span>
 
                           <i />
@@ -1707,6 +1861,21 @@ export function FinSentinelDashboard({
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {confirmClear && (
+        <div className="confirm-backdrop" onClick={() => setConfirmClear(false)}>
+          <div className="confirm-card" onClick={(event) => event.stopPropagation()}>
+            <h3>Clear all notifications?</h3>
+            <p>This hides inbox alerts for your account. Reconstructed repayments stay on the calendar.</p>
+            <div className="confirm-actions">
+              <button type="button" onClick={() => setConfirmClear(false)}>Cancel</button>
+              <button type="button" className="confirm-clear" disabled={clearing} onClick={clearNotifications}>
+                {clearing ? 'Clearing…' : 'Clear'}
+              </button>
+            </div>
           </div>
         </div>
       )}

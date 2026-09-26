@@ -14,6 +14,25 @@
 .auth-error { margin: 0; color: #ff9d9d; font-size: .9rem; }
 .auth-switch { margin: 22px 0 0; color: #9ba9bc; text-align: center; font-size: .9rem; }
 .auth-switch a { color: #54d6ac; font-weight: 700; text-decoration: none; }
+.auth-optional { color: #7d8c9c; font-weight: 500; }
+.profile { position: relative; }
+.profile-trigger { display: flex; align-items: center; gap: 9px; width: 100%; border: 0; background: transparent; color: inherit; text-align: left; padding: 4px; }
+.profile-menu { position: absolute; left: 0; right: 0; bottom: 46px; border: 1px solid #263044; background: #111722; border-radius: 10px; padding: 10px; z-index: 5; }
+.profile-menu-meta { margin-bottom: 8px; }
+.profile-menu-meta strong, .profile-menu-meta small { display: block; }
+.profile-menu-meta small { color: #7d8c9c; font-size: 11px; margin-top: 3px; word-break: break-all; }
+.profile-menu button { width: 100%; display: flex; align-items: center; gap: 8px; border: 0; border-radius: 8px; padding: 8px 9px; background: #182231; color: #ef9b8e; }
+.drawer-actions { display: flex; align-items: flex-start; gap: 8px; }
+.clear-notifications { border: 1px solid #1e5549; background: #0f2725; color: #88e4c2; border-radius: 6px; padding: 8px 10px; font-size: 11px; font-weight: 700; }
+.clear-notifications:disabled { opacity: .45; }
+.empty-copy { color: #788795; font-size: 13px; margin: 16px 0 0; }
+.confirm-backdrop { position: fixed; inset: 0; background: #03070bcc; z-index: 20; display: grid; place-items: center; padding: 20px; }
+.confirm-card { width: min(100%, 360px); background: #111722; border: 1px solid #263044; border-radius: 16px; padding: 22px; }
+.confirm-card h3 { margin: 0 0 8px; font-size: 18px; }
+.confirm-card p { margin: 0; color: #9ba9bc; font-size: 13px; line-height: 1.45; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.confirm-actions button { border: 1px solid #2a3a49; background: #151f2b; color: #c4d2d9; border-radius: 8px; padding: 8px 12px; }
+.confirm-clear { background: #54d6ac !important; border-color: #54d6ac !important; color: #08120f !important; font-weight: 800; }
 @media (max-width: 480px) { .auth-card { padding: 26px 20px; } }
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';

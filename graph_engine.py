@@ -5,11 +5,10 @@ from dateutil import parser as date_parser
 from models import LoanObligation, RepaymentCycle
 
 
-def find_or_create_cycle(db: Session, parsed, notification_id: int):
+def find_or_create_cycle(db: Session, parsed, notification_id: int, user_id: int | None = None):
     if not parsed.get("amount") or parsed.get("intent") == "NON_FINANCIAL":
         return None
 
-    # Get due date safely
     due = parsed.get("due_date")
 
     if isinstance(due, str):
@@ -30,13 +29,17 @@ def find_or_create_cycle(db: Session, parsed, notification_id: int):
         or "Unknown lender"
     )
 
-    loan = db.query(LoanObligation).filter(
+    loan_query = db.query(LoanObligation).filter(
         LoanObligation.lender_name == lender_name,
         LoanObligation.monthly_emi == parsed["amount"]
-    ).first()
+    )
+    if user_id is not None:
+        loan_query = loan_query.filter(LoanObligation.user_id == user_id)
+    loan = loan_query.first()
 
     if not loan:
         loan = LoanObligation(
+            user_id=user_id,
             lender_name=lender_name,
             loan_type="Instant Loan",
             total_principal=parsed["amount"] * 12,
@@ -77,11 +80,12 @@ def find_or_create_cycle(db: Session, parsed, notification_id: int):
     return cycle
 
 
-def active_cycles(db: Session):
-    return (
+def active_cycles(db: Session, user_id: int | None = None):
+    query = (
         db.query(RepaymentCycle)
         .join(LoanObligation)
         .filter(RepaymentCycle.status != "PAID")
-        .order_by(RepaymentCycle.due_date)
-        .all()
     )
+    if user_id is not None:
+        query = query.filter(LoanObligation.user_id == user_id)
+    return query.order_by(RepaymentCycle.due_date).all()
