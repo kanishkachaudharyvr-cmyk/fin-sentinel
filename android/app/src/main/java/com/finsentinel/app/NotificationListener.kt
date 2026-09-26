@@ -28,7 +28,7 @@ class NotificationListener : NotificationListenerService() {
 
     // CONFIGURABLE BACKEND URL
     // Change this to your local IP (e.g. http://192.168.1.5:8000) or your production domain
-    private val BACKEND_URL = "https://fruity-tips-tan.loca.lt"
+    private val BACKEND_URL = "https://finsentinel-hackathon.loca.lt"
     
     private val scope = CoroutineScope(Dispatchers.IO)
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
