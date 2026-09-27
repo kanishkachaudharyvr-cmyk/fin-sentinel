@@ -33,13 +33,19 @@ export const deviceEmiRecords = pgTable('fin_sentinel_device_emi_records', {
   createdAt: timestamp('created_at').notNull(),
 })
 
+const connectionString =
+  process.env.POSTGRES_URL ??
+  process.env.POSTGRES_URL_NON_POOLING ??
+  process.env.DATABASE_URL_UNPOOLED ??
+  process.env.DATABASE_URL
+
 const globalForDb = globalThis as unknown as { finSentinelPool?: Pool }
 export const pool = globalForDb.finSentinelPool ?? new Pool({
-  connectionString:
-    process.env.POSTGRES_URL_NON_POOLING ??
-    process.env.DATABASE_URL_UNPOOLED ??
-    process.env.POSTGRES_URL ??
-    process.env.DATABASE_URL,
+  connectionString,
+  ...(connectionString?.includes('neon.tech') || connectionString?.includes('supabase')
+    ? { ssl: { rejectUnauthorized: false } }
+    : {}),
 })
 if (process.env.NODE_ENV !== 'production') globalForDb.finSentinelPool = pool
 export const db = drizzle(pool)
+
